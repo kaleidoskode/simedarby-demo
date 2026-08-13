@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# Assessment material
+# ---------------------------------------------------------------------------
+# The brief and wireframes supplied by the interviewer. Reference only, not
+# part of the deliverable, and not ours to republish.
+REF/
+
+# ---------------------------------------------------------------------------
+# Local tooling
+# ---------------------------------------------------------------------------
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---------------------------------------------------------------------------
+# Secrets and environment
+# ---------------------------------------------------------------------------
+# Only .env.example is committed; real credentials never are.
+.env
+.env.*
+!.env.example
+.data/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+# The backend test suite is tracked on purpose. The base template ignored
+# `tests/*`, which would have excluded the seat lock concurrency tests; only
+# the caches below are ignored.
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Backend runtime scratch directory
+backend/app/temp/
+
+# ---------------------------------------------------------------------------
+# Node, for any front end added later
+# ---------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.next/
+.expo/
+
+# ---------------------------------------------------------------------------
+# Logs and scratch
+# ---------------------------------------------------------------------------
+logs/
+*.log
+note.txt
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini

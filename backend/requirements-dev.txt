@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Test suite. The seat lock concurrency tests run against the real MongoDB and
+# Redis containers from docker-compose rather than mocks, so that the first
+# come first serve guarantee is proven against the actual engines.
+pytest==8.3.3
+pytest-asyncio==0.24.0
+anyio==4.6.0

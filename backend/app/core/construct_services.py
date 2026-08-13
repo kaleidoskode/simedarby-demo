@@ -17,6 +17,7 @@ from app.services import (
     catalog_services,
     event_services,
     lock_services,
+    payment_services,
     seat_services,
 )
 
@@ -63,3 +64,13 @@ async def bookings(
 ) -> booking_services.BookingServices:
     """Drafts between choosing seats and paying for them."""
     return booking_services.BookingServices(mongo_db1, lock, event)
+
+
+async def payments(
+    mongo_db1: AsyncIOMotorDatabase = Depends(get_mongo_db1),
+    lock: lock_services.LockServices = Depends(locks),
+    event: event_services.EventServices = Depends(events),
+    booking: booking_services.BookingServices = Depends(bookings),
+) -> payment_services.PaymentServices:
+    """Payment, permanent seat reservation and ticket issue."""
+    return payment_services.PaymentServices(mongo_db1, lock, event, booking)

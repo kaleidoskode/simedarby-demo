@@ -93,22 +93,34 @@ idempotency and locking a sold seat. The real-time tests cover push delivery to
 one and to several watchers, per-recipient `held_by_me`, and that polling
 returns the identical change at the identical version.
 
-Both suites were verified to actually fail when they should:
+The booking and payment tests check the arithmetic against the design: two
+seats and a discounted combo come to **RM104.50**, the total printed on the
+Booking Summary screen and on the ticket.
+
+The suites were verified to actually fail when they should, by breaking the
+code they cover:
 
 * removing the conflict check from the Lua script let all 50 racers win the
   same seat, and the concurrency test caught it
 * disabling the fan-out made the five push-dependent real-time tests time out,
   while the six that do not need push still passed
+* removing the idempotency guard made the payment retry test fail
 
-The booking tests check the arithmetic against the design: two seats and a
-discounted combo come to **RM104.50**, the total printed on the Booking Summary
-screen.
+One mutation was more informative for passing. Removing the atomic claim from
+the payment path did **not** break anything: twelve concurrent payments still
+produced a single charge, because the unique index on `seat_reservations` is
+what actually serialises them. That prompted a closer look at the rollback,
+which was deleting reservations by `booking_id` — too broad if two requests for
+one booking ever reserved at the same time, since a losing request would delete
+rows the winner had just written. It now removes only the ids the failing
+attempt itself inserted.
 
 ```
-tests/test_booking_flow.py ................
+tests/test_booking_flow.py .......................
+tests/test_payment_flow.py .................
 tests/test_realtime.py ...........
 tests/test_seat_lock_concurrency.py ..........
-37 passed
+57 passed
 ```
 
 ### Running without Docker
@@ -150,6 +162,9 @@ All responses use the `{success, message, data}` envelope. Full schemas at
 | GET | `/api/v1/bookings/{id}` | bearer | Booking summary |
 | PUT | `/api/v1/bookings/{id}/fnb` | bearer | Set the food and drink order |
 | DELETE | `/api/v1/bookings/{id}` | bearer | Cancel and release the seats |
+| GET | `/api/v1/payment-methods` | – | Payment options |
+| POST | `/api/v1/bookings/{id}/pay` | bearer | Pay and confirm the seats |
+| GET | `/api/v1/bookings/{id}/ticket` | bearer | Ticket for a confirmed booking |
 
 The catalogue is public because the design opens onto the home screen with no
 login. A token is required from seat locking onward, where a request owns
@@ -245,6 +260,38 @@ watching the plan sees the seats reappear instead of waiting out the TTL.
 Screening details are copied onto the booking rather than joined at read time,
 so the summary and the ticket render from one document and still read correctly
 long after the catalogue has moved on.
+
+### Payment
+
+The order of operations is the design, not an implementation detail:
+
+```
+1. claim the booking   atomic; a second request cannot claim a claimed booking
+2. reserve the seats   unique index binds here; cheap and reversible
+3. charge              irreversible, so it goes last
+4. confirm
+```
+
+Reserving before charging means a seat lost between the summary and the payment
+screen costs the user nothing — the request fails with `409` before any money
+moves. Charging first would mean taking payment for seats that were never
+allocated, which needs a refund to undo.
+
+**Idempotency.** Send an `Idempotency-Key` header. A retry with the same key
+returns the original booking and the original transaction reference instead of
+charging again, which matters on a mobile network where a response can be lost
+after the request already succeeded. Without a key, paying twice is a `409`
+rather than a second sale.
+
+**Cards are not stored.** The number is validated (length and Luhn check digit),
+used, and discarded; only the last four digits are kept so a user can recognise
+which card they used. A real deployment would send the card straight to a
+provider and never let it reach this service.
+
+For the simulated gateway, a card ending `0002` or `0000` is declined with
+`402`, matching the convention providers use for test numbers, so the failure
+path can be exercised. A declined payment leaves the seats held and the booking
+retryable with another card — nothing is reserved.
 
 ### Real-time updates
 

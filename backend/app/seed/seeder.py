@@ -17,6 +17,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.config import settings
 from app.databases.mongodb import collections
 from app.databases.mongodb.indexes import ensure_indexes
+from app.services.booking_services import screening_snapshot
 from app.utilities.local_time import cinema_timezone, display_time
 
 logger = logging.getLogger(__name__)
@@ -73,8 +74,6 @@ def _load(name: str) -> List[Dict[str, Any]]:
     return records
 
 
-
-
 def build_showtimes(movies: List[Dict[str, Any]],
                     cinemas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Generate screenings for the next DAYS_AHEAD days."""
@@ -129,31 +128,6 @@ def demo_showtime_id() -> str:
             f"_{DEMO_HALL.replace('hall_', '')}")
 
 
-def build_screening_snapshot(showtime: Dict[str, Any], movie: Dict[str, Any],
-                             hall: Dict[str, Any]) -> Dict[str, Any]:
-    """The screening details copied onto a booking.
-
-    Built the same way the booking service builds it, so a seeded booking is
-    indistinguishable in shape from one made through the API and validates
-    against the same model.
-    """
-    return {
-        "showtime_id": showtime["_id"],
-        "movie_title": movie["title"],
-        "genres": movie.get("genres", []),
-        "duration_mins": movie.get("duration_mins", 0),
-        "formats": movie.get("formats", []),
-        "poster_url": movie.get("poster_url"),
-        "cinema_name": showtime["cinema_name"],
-        "hall_name": hall["name"],
-        "display_date": showtime.get("display_date", ""),
-        "starts_at": showtime["starts_at"],
-        "ends_at": showtime["ends_at"],
-        "start_display": showtime.get("display_time", ""),
-        "end_display": display_time(showtime["ends_at"]),
-    }
-
-
 def build_taken_seats(showtime_id: str, price_minor: int,
                       screening: Dict[str, Any]
                       ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
@@ -194,7 +168,7 @@ def build_taken_seats(showtime_id: str, price_minor: int,
 
     reservations = [
         {
-            "_id": f"res_seed_{showtime_id}_{seat}",
+            "_id": f"res_{showtime_id}_{seat}",
             "showtime_id": showtime_id,
             "seat": seat,
             "booking_id": booking_id,
@@ -247,7 +221,7 @@ async def seed(db: AsyncIOMotorDatabase, reset: bool = False) -> Dict[str, int]:
 
     booking, reservations = build_taken_seats(
         showtime_id, DEMO_SEAT_PRICE_MINOR,
-        build_screening_snapshot(demo_showtime, demo_movie, demo_hall))
+        screening_snapshot(demo_showtime, demo_movie, demo_hall))
     documents[collections.BOOKINGS] = [booking]
     documents[collections.SEAT_RESERVATIONS] = reservations
 

@@ -9,7 +9,16 @@ from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
 from app.databases.mongodb.indexes import ensure_indexes
 from app.databases.redis.dependencies import get_redis, redis_service
 from app.core.logging_config import configure_logging
-from app.routes import auth, bookings, fnb, movies, realtime, seats, venues
+from app.routes import (
+    auth,
+    bookings,
+    fnb,
+    movies,
+    payments,
+    realtime,
+    seats,
+    venues,
+)
 from app.services.realtime_services import broadcaster
 from fastapi import FastAPI, Request, HTTPException
 import asyncio
@@ -151,8 +160,9 @@ app.include_router(seats.router, prefix=f"{API_V1}/showtimes", tags=["seats"])
 app.include_router(realtime.router, prefix=f"{API_V1}/ws", tags=["realtime"])
 app.include_router(bookings.router, prefix=f"{API_V1}/bookings",
                    tags=["bookings"])
-
-# Still to land: payment.
+# Payment routes carry their own paths, since they span /payment-methods and
+# /bookings/{id}/pay.
+app.include_router(payments.router, prefix=API_V1)
 
 if __name__ == "__main__":
     uvicorn.run(

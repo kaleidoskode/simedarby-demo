@@ -67,6 +67,15 @@ class BookingStatus(str, Enum):
     expired = "expired"
 
 
+# A booking still in play: its food order can change and it can be paid for.
+# Held as plain strings because that is how the status is stored in MongoDB, so
+# every comparison is like for like.
+OPEN_BOOKING_STATUSES = frozenset({
+    BookingStatus.draft.value,
+    BookingStatus.awaiting_payment.value,
+})
+
+
 class PaymentMethod(str, Enum):
     debit_card = "debit_card"
     bank_transfer = "bank_transfer"

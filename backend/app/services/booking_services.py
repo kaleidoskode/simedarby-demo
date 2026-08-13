@@ -17,7 +17,7 @@ import secrets
 import string
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
@@ -34,7 +34,12 @@ from app.schemas.booking_schema import (
     FnbSelectionItem,
     PaymentDetail,
 )
-from app.schemas.common_schema import BookingStatus, Money, SeatStatus
+from app.schemas.common_schema import (
+    OPEN_BOOKING_STATUSES,
+    BookingStatus,
+    Money,
+    SeatStatus,
+)
 from app.services.event_services import EventServices
 from app.services.lock_services import LockServices
 from app.utilities.local_time import display_time
@@ -44,9 +49,36 @@ logger = logging.getLogger(__name__)
 _REFERENCE_ALPHABET = string.ascii_uppercase + string.digits
 _REFERENCE_ATTEMPTS = 5
 
-# Statuses a draft may still be edited in. Stored as plain strings because that
-# is how the status is held in MongoDB, so every comparison is like for like.
-_EDITABLE = {BookingStatus.draft.value, BookingStatus.awaiting_payment.value}
+
+def screening_snapshot(showtime: Dict[str, Any],
+                       movie: Optional[Dict[str, Any]],
+                       hall: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The screening details copied onto a booking.
+
+    Copied rather than joined at read time, so the summary and the ticket render
+    from one document and still read correctly long after the catalogue has
+    moved on.
+
+    A module level function because the seeder builds the same snapshot for its
+    pre-sold booking. Sharing it is what stops a seeded booking and a real one
+    drifting into different shapes.
+    """
+    movie = movie or {}
+    return {
+        "showtime_id": showtime["_id"],
+        "movie_title": movie.get("title", "Unknown"),
+        "genres": movie.get("genres", []),
+        "duration_mins": movie.get("duration_mins", 0),
+        "formats": movie.get("formats", []),
+        "poster_url": movie.get("poster_url"),
+        "cinema_name": showtime["cinema_name"],
+        "hall_name": (hall or {}).get("name", "Unknown"),
+        "display_date": showtime.get("display_date", ""),
+        "starts_at": showtime["starts_at"],
+        "ends_at": showtime["ends_at"],
+        "start_display": showtime.get("display_time", ""),
+        "end_display": display_time(showtime["ends_at"]),
+    }
 
 
 class BookingServices:
@@ -79,7 +111,12 @@ class BookingServices:
             "total_minor": tickets + fnb + service,
         }
 
-    def _to_model(self, doc: Dict[str, Any]) -> Booking:
+    def to_model(self, doc: Dict[str, Any]) -> Booking:
+        """Turn a stored booking into its API representation.
+
+        Public because the payment service confirms a booking and returns it in
+        the same shape, so both paths render a booking identically.
+        """
         currency = doc.get("currency", settings.currency)
         amounts = doc["amounts"]
         screening = doc["screening"]
@@ -116,12 +153,17 @@ class BookingServices:
             confirmed_at=doc.get("confirmed_at"),
         )
 
-    async def _load(self, booking_id: str, user: CurrentUser) -> Dict[str, Any]:
+    async def load_for_user(self, booking_id: str,
+                            user: CurrentUser) -> Dict[str, Any]:
         """Fetch a booking belonging to this caller.
 
         Someone else's booking is reported as missing rather than forbidden, so
         the endpoint does not confirm that a reference exists to a caller who
         has no business knowing.
+
+        Public because payment loads a booking through the same ownership and
+        expiry checks; duplicating them there would be a place for the two to
+        drift apart.
         """
         doc = await self.db[collections.BOOKINGS].find_one(
             {"_id": booking_id, "user_id": user.id})
@@ -140,7 +182,7 @@ class BookingServices:
         the service stateless with nothing to run in the background.
         """
         expires_at = doc.get("expires_at")
-        if (doc["status"] in _EDITABLE and expires_at
+        if (doc["status"] in OPEN_BOOKING_STATUSES and expires_at
                 and expires_at <= datetime.now(timezone.utc)):
             await self.db[collections.BOOKINGS].update_one(
                 {"_id": doc["_id"]},
@@ -163,21 +205,7 @@ class BookingServices:
 
         return {
             "showtime": showtime,
-            "snapshot": {
-                "showtime_id": showtime_id,
-                "movie_title": movie["title"] if movie else "Unknown",
-                "genres": movie.get("genres", []) if movie else [],
-                "duration_mins": movie.get("duration_mins", 0) if movie else 0,
-                "formats": movie.get("formats", []) if movie else [],
-                "poster_url": movie.get("poster_url") if movie else None,
-                "cinema_name": showtime["cinema_name"],
-                "hall_name": hall["name"] if hall else "Unknown",
-                "display_date": showtime.get("display_date", ""),
-                "starts_at": showtime["starts_at"],
-                "ends_at": showtime["ends_at"],
-                "start_display": showtime.get("display_time", ""),
-                "end_display": display_time(showtime["ends_at"]),
-            },
+            "snapshot": screening_snapshot(showtime, movie, hall),
         }
 
     # ----------------------------------------------------------------- create
@@ -245,7 +273,7 @@ class BookingServices:
         logger.info("Booking %s created for %s: %s on %s",
                     document["_id"], user.id, seats, showtime_id)
 
-        return self._to_model(document)
+        return self.to_model(document)
 
     async def _insert_with_reference(self, document: Dict[str, Any]) -> None:
         """Insert, retrying on the astronomically unlikely reference clash.
@@ -269,7 +297,7 @@ class BookingServices:
 
     async def get(self, user: CurrentUser, booking_id: str) -> Booking:
         """One booking, as shown on the Booking Summary screen."""
-        return self._to_model(await self._load(booking_id, user))
+        return self.to_model(await self.load_for_user(booking_id, user))
 
     async def list_mine(self, user: CurrentUser) -> List[Booking]:
         """Every booking belonging to the caller, newest first."""
@@ -277,7 +305,7 @@ class BookingServices:
                   .find({"user_id": user.id})
                   .sort("created_at", -1)
                   .limit(50))
-        return [self._to_model(await self._expire_if_lapsed(doc))
+        return [self.to_model(await self._expire_if_lapsed(doc))
                 async for doc in cursor]
 
     # -------------------------------------------------------------------- F&B
@@ -285,9 +313,9 @@ class BookingServices:
     async def set_fnb(self, user: CurrentUser, booking_id: str,
                       items: List[FnbSelectionItem]) -> Booking:
         """Replace the food and drink order and recompute the total."""
-        doc = await self._load(booking_id, user)
+        doc = await self.load_for_user(booking_id, user)
 
-        if doc["status"] not in _EDITABLE:
+        if doc["status"] not in OPEN_BOOKING_STATUSES:
             raise CustomErrorException(
                 f"This booking is {doc['status']} and can no longer be changed",
                 status_code=409)
@@ -342,13 +370,13 @@ class BookingServices:
         logger.info("Booking %s food order set to %d line(s)", booking_id,
                     len(lines))
 
-        return self._to_model(doc)
+        return self.to_model(doc)
 
     # ----------------------------------------------------------------- cancel
 
     async def cancel(self, user: CurrentUser, booking_id: str) -> Booking:
         """Abandon a booking and hand the seats straight back."""
-        doc = await self._load(booking_id, user)
+        doc = await self.load_for_user(booking_id, user)
 
         if doc["status"] == BookingStatus.confirmed.value:
             raise CustomErrorException(
@@ -356,7 +384,7 @@ class BookingServices:
 
         if doc["status"] in {BookingStatus.cancelled.value,
                              BookingStatus.expired.value}:
-            return self._to_model(doc)
+            return self.to_model(doc)
 
         released = await self.locks.release(doc["showtime_id"], doc["seats"],
                                             user.id)
@@ -376,4 +404,4 @@ class BookingServices:
         doc["expires_at"] = None
 
         logger.info("Booking %s cancelled, released %s", booking_id, released)
-        return self._to_model(doc)
+        return self.to_model(doc)

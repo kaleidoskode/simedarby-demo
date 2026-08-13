@@ -1,12 +1,39 @@
 # Cinema Booking API
 
-Backend for the cinema booking app assignment (section 4.3). The key feature is
-locking a seat on a **first come first serve** basis and showing every other
-user that seating plan change in real time.
+Backend for the cinema booking app assignment, **section 4.3 (Back End
+Developer)**. The key feature is locking a seat on a **first come first serve**
+basis and showing every other user that change to the seating plan in real
+time.
 
 Built on the provided FastAPI base structure: `route -> construct_services
 dependency -> service -> datastore`, with `GenericResponse` envelopes and the
 `CustomErrorException` middleware.
+
+```bash
+cp .env.example .env
+docker compose up --build
+docker compose exec api python -m app.seed --reset
+docker compose exec api pytest -v
+```
+
+Swagger is then at **http://localhost:8000/docs**.
+
+---
+
+## How this meets 4.3
+
+| Requirement | Where | In short |
+| --- | --- | --- |
+| Build the API endpoints for the flow at 2.0 | [Endpoints](#endpoints) | 23 REST operations and 1 WebSocket, covering every node of the flowchart from Home through to Booking Confirmation |
+| Demonstrate statelessness in API design | [Statelessness](#statelessness) | No session store. Callers carry a JWT, all shared state is in Redis and MongoDB, so any worker serves any request — verified across 4 gunicorn workers |
+| The best way to cater for the real-time scenario | [Real-time updates](#real-time-updates) | One Redis stream feeding a WebSocket, with one reader per worker rather than per client. Proven to cross worker processes |
+| The best method for real-time booking scenarios | [Seat locking](#seat-locking) · [Payment](#payment) | Atomic Lua locks with a TTL, backed by a unique index that makes double selling impossible. 50 simultaneous requests for one seat produce exactly one winner |
+| Polling / WebSocket / HTTP2 comparison | [Transport comparison](#transport-comparison) | WebSocket chosen, polling shipped alongside as a fallback reading the same log, HTTP/2 push rejected with reasons |
+| API documentation, e.g. Swagger UI | `/docs` | Auto-generated OpenAPI, 64 schemas, every endpoint with request and response models |
+
+Beyond the brief: a **57-test suite** run against the live stack, three of whose
+guarantees were confirmed by deliberately breaking the code to check the tests
+notice. See [Tests](#tests).
 
 ---
 
@@ -179,10 +206,36 @@ curl -X POST localhost:8000/api/v1/auth/token \
 
 In Swagger, paste the returned `access_token` into **Authorize**.
 
-No session is stored. The token carries `sub`, `name`, `iss`, `aud`, `iat` and
-`exp`, and is verified on each request with the algorithm pinned to HS256 —
-accepting whatever the token declares is how `alg: none` and HS/RS confusion
-attacks work.
+### Statelessness
+
+Nothing is held in a worker between requests. There is no session store, no
+sticky routing and no in-memory cache of anything a later request depends on:
+
+* **Identity** travels in the request. The JWT carries `sub`, `name`, `iss`,
+  `aud`, `iat` and `exp`, and is verified on each call with the algorithm
+  pinned to HS256 — accepting whatever the token declares is how `alg: none`
+  and HS/RS confusion attacks work.
+* **Seat holds** live in Redis, not in the process that created them, so the
+  worker that locks a seat and the worker that later releases or sells it need
+  not be the same one.
+* **Real-time state** is a Redis stream. A WebSocket is the one thing that
+  necessarily holds a connection, but it holds no authoritative state: it is a
+  subscriber, and a client can reconnect to a different worker and catch up
+  with `?since=`.
+
+The application runs under **four gunicorn workers** and the suite drives it
+over HTTP for exactly that reason — a guarantee that only held inside one event
+loop would fail there. The fan-out was checked directly across processes: with
+the socket on worker `pid 9` and eight locks handled by `pid 10` and `pid 7`,
+none by `pid 9`, the socket still received all eight changes.
+
+The practical consequence is that the service scales by adding workers or
+containers, with no shared memory and nothing to drain on deploy.
+
+Guest tokens are issued on demand, so this is identity rather than access
+control: it proves *which* caller holds a seat, and stops one user releasing
+another's. It does not stop a determined client requesting many tokens — that
+is a rate limiting concern, noted under [Not built](#not-built).
 
 ### Seat locking
 
@@ -381,21 +434,21 @@ started are excluded unless `include_past=true`.
 ## Architecture
 
 ```
-                      +-----------------------------+
-   HTTP + WS -------->|  routes/cinema/*.py         |
-                      +--------------+--------------+
-                                     |  Depends(...)
-                      +--------------v--------------+
-                      |  services/cinema/*.py       |
-                      +------+---------------+------+
-                             |               |
-                 +-----------v-----+  +------v-------------+
-                 | MongoDB         |  | Redis              |
-                 | SOURCE OF TRUTH |  | EPHEMERAL          |
-                 | catalog,        |  | seat locks (TTL),  |
-                 | bookings,       |  | event stream       |
-                 | seat_reservations| | (fanout + replay)  |
-                 +-----------------+  +--------------------+
+                       +----------------------------+
+   HTTP + WS --------->|  app/routes/*.py           |
+                       +-------------+--------------+
+                                     | Depends(...)  core/construct_services.py
+                       +-------------v--------------+
+                       |  app/services/*.py         |
+                       +------+--------------+------+
+                              |              |
+                  +-----------v----+  +------v-------------+
+                  | MongoDB        |  | Redis              |
+                  | SOURCE OF TRUTH|  | EPHEMERAL          |
+                  | catalogue,     |  | seat locks (TTL),  |
+                  | bookings,      |  | event stream       |
+                  | seat_reservations| | (fanout + replay) |
+                  +----------------+  +--------------------+
 ```
 
 Redis is **not** trusted for the final booking. It holds the short lived
@@ -403,31 +456,55 @@ Redis is **not** trusted for the final booking. It holds the short lived
 compound index on `(showtime_id, seat)` in `seat_reservations`, so double
 booking stays impossible even if Redis is flushed or restarted.
 
+The split is the point: losing a lock costs a user a retry, whereas losing a
+reservation would sell the same seat twice. Only the second needs durability.
+
 ---
 
 ## Project structure
 
 ```
 app/
-├── main.py                    # app factory, lifespan, health check
-├── workers.py                 # gunicorn worker class (WebSocket enabled)
+├── main.py                     app factory, lifespan, health check
+├── workers.py                  gunicorn worker class (WebSocket enabled)
 ├── core/
-│   ├── config.py              # settings, Mongo/Redis/MySQL URI construction
-│   ├── construct_services.py  # dependency injection for services
-│   └── security.py            # JWT mint and verify, caller identity
+│   ├── config.py               settings, Mongo and Redis URI construction
+│   ├── construct_services.py   dependency injection for every service
+│   ├── security.py             JWT mint and verify, caller identity
+│   └── logging_config.py       stdout logging, honours APP_LOGGING_LEVEL
 ├── databases/
-│   ├── mongodb/               # catalogue, bookings, seat reservations
-│   └── redis/                 # seat locks, event stream
-├── routes/                    # HTTP and WebSocket endpoints
-│   ├── auth.py  movies.py  venues.py  fnb.py
-├── services/                  # query and booking logic
-│   ├── auth_services.py  catalog_services.py
-├── schemas/                   # domain models
-│   ├── common_schema.py  auth_schema.py  movie_schema.py
-│   ├── cinema_schema.py  fnb_schema.py   booking_schema.py
-├── seed/                      # wireframe dataset + seeder
-├── middleware/                # exception handling, process time logging
-└── helpers/ · utilities/      # response envelope, credential resolution
+│   ├── mongodb/                client, collections, index bootstrap
+│   └── redis/                  client and pool
+├── routes/
+│   ├── auth.py                 guest token, whoami
+│   ├── movies.py               catalogue, search, reviews
+│   ├── venues.py               locations, cinemas, halls, showtimes
+│   ├── fnb.py                  food and beverage catalogue
+│   ├── seats.py                seating plan, lock, release, heartbeat, deltas
+│   ├── realtime.py             WebSocket endpoint
+│   ├── bookings.py             draft bookings and the food order
+│   └── payments.py             methods, pay, ticket
+├── services/
+│   ├── auth_services.py        token issuing
+│   ├── catalog_services.py     all read side queries
+│   ├── lock_services.py        Redis Lua seat locks
+│   ├── event_services.py       the seat change stream
+│   ├── seat_services.py        seating plan, composed from three sources
+│   ├── realtime_services.py    WebSocket fan-out, one reader per worker
+│   ├── booking_services.py     drafts, food order, cancellation
+│   └── payment_services.py     payment, reservation, ticket
+├── schemas/                    domain models, one module per area
+├── seed/                       wireframe dataset and seeder
+├── middleware/                 exception handling, process time logging
+├── helpers/                    the GenericResponse envelope
+└── utilities/                  credential resolution, local time formatting
+
+tests/
+├── conftest.py                 fixtures; lock purging between tests
+├── test_seat_lock_concurrency.py
+├── test_realtime.py
+├── test_booking_flow.py
+└── test_payment_flow.py
 ```
 
 Routes, services and schemas are flat. The service has one domain, so a
@@ -438,13 +515,19 @@ holding a second sibling.
 
 | Collection | Holds | Notable index |
 | --- | --- | --- |
-| `movies` | Catalogue | text index on title + synopsis for search |
+| `movies` | Catalogue | title (listing order), sections (home screen rails) |
 | `reviews` | Customer reviews | by movie, most recent first |
 | `locations` · `cinemas` · `halls` | Venues and seat layouts | cinema by location, hall by cinema |
 | `showtimes` | Screenings | by movie and by cinema, both with start time |
 | `fnb_items` | Food and drink | by category |
-| `bookings` | Booking lifecycle | unique reference; status + expiry |
+| `bookings` | Booking lifecycle | unique reference; user + recency; status + expiry |
 | `seat_reservations` | Permanently sold seats | **unique `(showtime_id, seat)`** |
+
+Search is a case-insensitive substring match, because a search box needs `ven`
+to find `Venom` and a text index matches whole words. No index can serve a
+substring, so there is deliberately none for it: a text index would have looked
+useful without ever being used. At a catalogue size where the scan matters, this
+belongs in a dedicated search engine rather than a cleverer Mongo query.
 
 That last index is the guarantee behind first come first serve. A Redis lock
 stops two users reaching checkout for the same seat, but a lock can be lost to
@@ -457,6 +540,21 @@ insert a second reservation for a sold seat
 the same seat on a different showtime
   -> accepted, so the constraint is scoped to the screening
 ```
+
+---
+
+## Not built
+
+Deliberate omissions, so the scope is explicit rather than left to be inferred.
+
+| Not built | Why |
+| --- | --- |
+| Real payment provider | The gateway is simulated. The integration point is one method, `PaymentServices._charge`; everything around it — ordering, idempotency, rollback — is what the flow actually depends on and is real |
+| User accounts | The flowchart opens on the Home screen with no login. Identity is a guest token, which is what seat ownership needs; accounts would add a store the design never asks for |
+| Rate limiting and seat quotas per user | A booking is capped at 10 seats, but nothing stops a client requesting many tokens. The answer is rate limiting at the edge, not in this service |
+| Promo codes | The Booking Summary wireframe shows a Promo Code field, but the 2.0 flowchart that 4.3 refers to has no such step. Left out rather than guessed at |
+| Refunds and cancellation after payment | Outside the flowchart, which ends at Booking Confirmation |
+| Email or push notifications | The confirmation screen mentions an email; sending it is not a backend API concern for this brief |
 
 ---
 
@@ -473,6 +571,7 @@ to get a running stack; the original files and patterns are otherwise intact.
 | `app/utilities/prefered_environment.py` | Added the `redis1` credential branch | Follows the existing per environment credential pattern |
 | `app/middleware/exception.py` | Stack trace withheld in production | Every `500` returned a traceback in a `debug` field, exposing internal paths |
 | `app/workers.py` | **Added** | `gunicorn_conf.py` referenced `app.workers.ConfigurableWorker`, which did not exist, so the Docker entrypoint failed on start |
+| `app/core/logging_config.py` | **Added** | Nothing configured logging, so the root logger sat at WARNING with no handlers: every `logger.info` was discarded and `logger.error` escaped only through Python's unformatted fallback, including the middleware's stack traces |
 | `Dockerfile` | Debian slim, no `.env` / key COPY | The build copied `.data/*.key` files that are not in the repo, so it failed; Alpine also had no wheels for the old dependency set |
 | `requirements.txt` | Trimmed to what is used | `nipype`, `pyxnat`, `pymupdf`, `pdfplumber`, `kafka-python` and others pulled a scientific stack unrelated to this service and would not build |
 | `.gitignore` | `tests/*` no longer ignored | The concurrency test suite is part of the deliverable |

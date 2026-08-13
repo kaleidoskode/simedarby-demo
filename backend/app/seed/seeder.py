@@ -184,9 +184,14 @@ def build_taken_seats(showtime_id: str, price_minor: int,
 async def seed(db: AsyncIOMotorDatabase, reset: bool = False) -> Dict[str, int]:
     """Populate the database. Returns the document count per collection."""
     if reset:
+        # Dropped rather than emptied, so indexes go too. `ensure_indexes`
+        # only creates what is declared and never removes what is not, so
+        # clearing documents alone would leave an index behind after it was
+        # retired from the code, still costing writes and confusing anyone
+        # who inspects the database.
         for name in collections.ALL:
-            await db[name].delete_many({})
-        logger.info("Cleared %d collections", len(collections.ALL))
+            await db.drop_collection(name)
+        logger.info("Dropped %d collections", len(collections.ALL))
 
     await ensure_indexes(db)
 

@@ -27,20 +27,17 @@ docker compose up -d
 docker compose exec api python -m app.seed --reset
 ```
 
-Then either run this directly:
+Then start this:
 
 ```bash
 npm install
 npm run dev            # http://localhost:3000
 ```
 
-or bring it up with the stack, where it sits behind a compose profile so that
-someone who only wants the API is not made to wait for a Next.js build:
-
-```bash
-cd ../backend
-docker compose --profile demo up --build
-```
+A dev server rather than a container, on purpose. There is nothing to build and
+nothing added to the backend's compose file, so `backend/` stays self-contained
+as the assessed deliverable and a reviewer who only wants the API never has to
+touch this.
 
 `NEXT_PUBLIC_API_BASE` defaults to `http://localhost:8000`. It is read by the
 browser, not the container, so it must be the address the browser can reach —

@@ -150,28 +150,6 @@ tests/test_seat_lock_concurrency.py ..........
 57 passed
 ```
 
-### Demo web client
-
-A small Next.js app in [`../frontend`](../frontend) walks the whole booking
-journey against this API.
-
-```bash
-docker compose --profile demo up --build     # adds the client on :3000
-```
-
-It sits behind a compose profile, so a plain `docker compose up` still brings up
-only the API and its datastores rather than making anyone wait for a Next.js
-build.
-
-**It is not a submission for 4.1**, which asks for a mobile app in React Native
-or Flutter. It is a web app on purpose so it cannot be mistaken for one. It
-exists because a seat locking the instant another user takes it is the one
-thing in this API that Swagger cannot show: open the seating plan in two browser
-windows and it is obvious immediately.
-
-Building it also found a real defect here, recorded in the table below: error
-responses were reaching browsers without CORS headers.
-
 ### Running without Docker
 
 ```bash

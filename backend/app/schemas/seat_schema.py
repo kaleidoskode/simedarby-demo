@@ -91,6 +91,32 @@ class LockResult(BaseModel):
         description="When the hold lapses unless extended by a heartbeat")
 
 
+class SeatChange(BaseModel):
+    """One seat changing state.
+
+    The holder's id is deliberately not exposed. Whether a change is the
+    caller's own is answered by `held_by_me`, computed per recipient, so
+    watching a seating plan never reveals other people's identifiers.
+    """
+
+    seat: str = Field(..., examples=["F4"])
+    status: SeatStatus
+    held_by_me: bool = False
+    at: datetime
+
+
+class SeatChangeList(BaseModel):
+    """Everything that happened after a given version."""
+
+    showtime_id: str
+    version: str = Field(
+        ...,
+        description="Position after applying these changes. Pass it as the "
+                    "next ?since= value.",
+        examples=["1723531200000-5"])
+    changes: List[SeatChange]
+
+
 class ReleaseResult(BaseModel):
     """Outcome of releasing a hold."""
 

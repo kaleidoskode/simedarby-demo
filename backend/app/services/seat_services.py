@@ -24,6 +24,8 @@ from app.schemas.common_schema import Money, SeatStatus
 from app.schemas.seat_schema import (
     LockResult,
     ReleaseResult,
+    SeatChange,
+    SeatChangeList,
     SeatPlan,
     SeatPlanRow,
     SeatPlanSummary,
@@ -142,6 +144,41 @@ class SeatServices:
             ),
             version=version,
         )
+
+    async def get_changes(self, showtime_id: str, since: str,
+                          viewer_id: str = "") -> SeatChangeList:
+        """Everything that happened after `since`.
+
+        The polling counterpart to the WebSocket, reading the same log, so the
+        two transports cannot disagree about what happened. Useful as a
+        fallback on a network where a socket will not stay up.
+        """
+        await self._showtime(showtime_id)
+
+        try:
+            entries = await self.events.read_since(showtime_id, since)
+        except ValueError as exc:
+            raise CustomErrorException(str(exc), status_code=422) from exc
+
+        changes = [
+            SeatChange(
+                seat=entry["seat"],
+                status=entry["status"],
+                # Resolved per caller, so a holder's id is never handed to
+                # anyone else.
+                held_by_me=bool(viewer_id) and entry.get("holder") == viewer_id,
+                at=entry["at"],
+            )
+            for entry in entries
+        ]
+
+        # When nothing changed, echo the caller's position rather than the
+        # stream head: the client is already up to date and should keep polling
+        # from where it is.
+        version = entries[-1]["id"] if entries else since
+
+        return SeatChangeList(showtime_id=showtime_id, version=version,
+                              changes=changes)
 
     # ------------------------------------------------------------ validation
 

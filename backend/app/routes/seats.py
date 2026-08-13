@@ -7,7 +7,7 @@ the moment a user selects it, and every other user watching that plan is told.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.core.construct_services import seats as seat_service
@@ -17,6 +17,7 @@ from app.schemas.auth_schema import CurrentUser
 from app.schemas.seat_schema import (
     LockResult,
     ReleaseResult,
+    SeatChangeList,
     SeatPlan,
     SeatSelection,
 )
@@ -63,6 +64,35 @@ async def get_seat_plan(
     return GenericResponse(
         message=f"{data.summary.available} of {data.summary.total} available",
         data=data)
+
+
+@router.get("/{showtime_id}/seats/changes",
+            response_model=GenericResponse[SeatChangeList],
+            summary="Seat changes since a version (polling fallback)")
+async def get_seat_changes(
+    *,
+    service: seat_services.SeatServices = Depends(seat_service),
+    showtime_id: str = Path(..., examples=["sho_20260814_1740_gsc_mv_1"]),
+    since: str = Query(
+        ...,
+        description="Version from a previous plan or change response",
+        examples=["1723531200000-0"]),
+    user: Optional[CurrentUser] = Depends(optional_user),
+):
+    """Only what changed, for clients that cannot hold a WebSocket open.
+
+    This reads the same change log the WebSocket delivers, so the two
+    transports can never disagree. It is also the reconnect path: after a
+    dropped socket, pass the last version you saw to collect what was missed
+    rather than re-fetching the whole plan.
+
+    The response's `version` is the value to send as the next `since`. When
+    nothing changed, it is echoed back unchanged and `changes` is empty.
+    """
+    data = await service.get_changes(showtime_id, since=since,
+                                     viewer_id=user.id if user else "")
+    return GenericResponse(
+        message=f"{len(data.changes)} change(s) since {since}", data=data)
 
 
 @router.post("/{showtime_id}/seats/lock",

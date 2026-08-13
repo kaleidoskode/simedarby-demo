@@ -9,7 +9,8 @@ from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
 from app.databases.mongodb.indexes import ensure_indexes
 from app.databases.redis.dependencies import get_redis, redis_service
 from app.core.logging_config import configure_logging
-from app.routes import auth, fnb, movies, seats, venues
+from app.routes import auth, fnb, movies, realtime, seats, venues
+from app.services.realtime_services import broadcaster
 from fastapi import FastAPI, Request, HTTPException
 import asyncio
 import logging
@@ -63,6 +64,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Readers first: they hold blocking reads on Redis, so cancelling them
+    # before the pool closes avoids errors on the way down.
+    await broadcaster.close()
     await redis_service.close()
     mongo_service.close()
 
@@ -144,8 +148,9 @@ app.include_router(movies.router, prefix=f"{API_V1}/movies", tags=["movies"])
 app.include_router(venues.router, prefix=API_V1)
 app.include_router(fnb.router, prefix=f"{API_V1}/fnb", tags=["food & beverage"])
 app.include_router(seats.router, prefix=f"{API_V1}/showtimes", tags=["seats"])
+app.include_router(realtime.router, prefix=f"{API_V1}/ws", tags=["realtime"])
 
-# Still to land: realtime transports, bookings, payment.
+# Still to land: bookings, payment.
 
 if __name__ == "__main__":
     uvicorn.run(

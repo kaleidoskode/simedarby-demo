@@ -12,7 +12,12 @@ import sys
 
 from app.core.config import settings
 
-_FORMAT = "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] %(message)s"
+# The process id is included because the app runs under several gunicorn
+# workers. Which worker served a request matters when reasoning about the
+# WebSocket fan-out, where one worker holds the socket and another may handle
+# the lock that triggers the message.
+_FORMAT = ("[%(asctime)s] %(levelname)s [pid %(process)d] "
+           "[%(name)s:%(lineno)d] %(message)s")
 _DATE_FORMAT = "%d/%b/%Y %H:%M:%S"
 
 _configured = False

@@ -87,16 +87,23 @@ socket is what proves the guarantee survives horizontal scaling, which is the
 reason the lock lives in Redis rather than in memory.
 
 The headline test fires **50 simultaneous requests for one seat** and asserts
-exactly one `201` and forty-nine `409`. The others cover all-or-nothing
+exactly one `201` and forty-nine `409`. The rest cover all-or-nothing
 selection, holder-only release, TTL expiry, heartbeat behaviour, retry
-idempotency and locking a sold seat.
+idempotency and locking a sold seat. The real-time tests cover push delivery to
+one and to several watchers, per-recipient `held_by_me`, and that polling
+returns the identical change at the identical version.
 
-The suite was verified to actually fail when it should: with the conflict check
-removed from the Lua script, all 50 racers won the same seat and the test caught
-it.
+Both suites were verified to actually fail when they should:
+
+* removing the conflict check from the Lua script let all 50 racers win the
+  same seat, and the concurrency test caught it
+* disabling the fan-out made the five push-dependent real-time tests time out,
+  while the six that do not need push still passed
 
 ```
-tests/test_seat_lock_concurrency.py .......... 10 passed
+tests/test_realtime.py ...........
+tests/test_seat_lock_concurrency.py ..........
+21 passed
 ```
 
 ### Running without Docker
@@ -127,6 +134,8 @@ All responses use the `{success, message, data}` envelope. Full schemas at
 | GET | `/api/v1/halls/{id}` | – | Physical seat layout |
 | GET | `/api/v1/showtimes` | – | Screenings (`movie_id`, `cinema_id`, `date`) |
 | GET | `/api/v1/showtimes/{id}/seats` | optional | Seating plan with live seat state |
+| GET | `/api/v1/showtimes/{id}/seats/changes` | optional | Changes since a version (polling fallback) |
+| WS | `/api/v1/ws/showtimes/{id}` | optional | Live seat changes, pushed |
 | POST | `/api/v1/showtimes/{id}/seats/lock` | bearer | Hold seats, all or nothing |
 | DELETE | `/api/v1/showtimes/{id}/seats/lock` | bearer | Release your own holds |
 | POST | `/api/v1/showtimes/{id}/seats/lock/heartbeat` | bearer | Extend a hold |
@@ -192,6 +201,80 @@ someone else's.
 the same seat, but a lock can be lost to a restart or an eviction. The binding
 guarantee is the unique index on `(showtime_id, seat)` in MongoDB, applied when
 payment is confirmed.
+
+### Real-time updates
+
+Both transports read **one Redis stream**, the same log the lock and release
+endpoints append to. That is the point: a WebSocket client and a polling client
+cannot end up disagreeing about what happened, because there is only one record
+of it.
+
+```
+lock / release ──XADD──> stream:showtime:{id}
+                              │
+              ┌───────────────┴────────────────┐
+        XREAD BLOCK                       XRANGE (since
+              ▼                                ▼
+   WS /api/v1/ws/showtimes/{id}      GET .../seats/changes?since=
+```
+
+**A stream, not pub/sub.** Pub/sub is fire and forget: a client that drops its
+connection has no way to learn what it missed, and a polling endpoint could not
+be built on it at all. Every stream entry has an id, so the same log serves live
+push, polling, and reconnect catch-up.
+
+**One reader per worker, not per client.** Giving each socket its own blocking
+read would mean 300 Redis connections for 300 people watching one screening.
+Each worker keeps a single reader per showtime and fans out to the sockets it
+holds locally, so Redis connections scale with screenings being watched, not
+viewers.
+
+```
+Redis stream ──XREAD BLOCK──> reader task (one per worker per showtime)
+                                    │
+                        ┌───────────┼───────────┐
+                        ▼           ▼           ▼
+                     socket      socket      socket
+```
+
+Verified across processes: with the socket held by worker **pid 9** and eight
+locks handled by workers **pid 10** and **pid 7** — none by pid 9 — the socket
+received all eight changes. Delivery goes through Redis, not process memory,
+which is why any worker can serve any client.
+
+**Messages.** A `snapshot` arrives first, so a client needs no separate REST
+call, then a `seat_change` per change:
+
+```json
+{"type": "snapshot", "version": "1786608216915-0", "plan": { ... }}
+{"type": "seat_change", "version": "1786608216915-0",
+ "changes": [{"seat": "A2", "status": "locked", "held_by_me": false,
+              "at": "2026-08-13T08:03:36.915626+00:00"}]}
+```
+
+The holder's id is never sent. Whether a change is the caller's own is answered
+by `held_by_me`, resolved per recipient, so watching a plan reveals no other
+user's identifier.
+
+**Reconnecting.** Every message carries the `version` it advances to. After a
+dropped socket, pass the last one seen to
+`GET /showtimes/{id}/seats/changes?since=` and collect exactly what was missed
+instead of re-fetching the whole plan. The `since` bound is exclusive, so
+polling twice never replays a change already applied.
+
+### Transport comparison
+
+| Approach | Latency | Cost per viewer | Verdict |
+| --- | --- | --- | --- |
+| REST polling on a timer | half the interval on average | a request per viewer per tick | shipped as the fallback |
+| Long polling | low | a held connection plus reconnect churn | superseded by WebSocket |
+| HTTP/2 server push | n/a | — | rejected: removed from browsers, and it pushes sub-resources rather than application events |
+| Server-sent events | low | one connection, one direction | viable, and simpler; rejected only because the booking flow benefits from a duplex channel later |
+| **WebSocket** | **low** | **one connection, duplex** | **chosen** |
+
+Polling is kept rather than dismissed. On a mobile network a socket will not
+always stay up, and a client that cannot hold one still needs correct data —
+which it gets, from the same log.
 
 ### Times and dates
 

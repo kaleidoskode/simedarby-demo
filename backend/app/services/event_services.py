@@ -75,3 +75,27 @@ class EventServices:
         entries = await self.redis.xrevrange(
             self.stream_key(showtime_id), count=1)
         return entries[0][0] if entries else "0-0"
+
+    async def read_since(self, showtime_id: str, since: str,
+                         limit: int = 500) -> List[Dict[str, Any]]:
+        """Replay entries recorded after `since`.
+
+        This is what a stream buys over pub/sub. A subscriber that dropped its
+        connection, or a client polling on an interval, can ask for exactly
+        what it missed instead of re-fetching the entire seating plan.
+        """
+        # The bracket makes the range exclusive, so the caller does not receive
+        # the entry it already has.
+        start = f"({since}" if since and since != "0-0" else "-"
+
+        try:
+            entries = await self.redis.xrange(
+                self.stream_key(showtime_id), min=start, max="+", count=limit)
+        except Exception as exc:
+            # A malformed id from a client should be a bad request, not a 500.
+            raise ValueError(f"Invalid version '{since}'") from exc
+
+        return [
+            {"id": entry_id, **fields}
+            for entry_id, fields in entries
+        ]

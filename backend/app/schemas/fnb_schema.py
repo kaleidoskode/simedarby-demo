@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.cinema.common_schema import FnbCategory, Money
+from app.schemas.common_schema import FnbCategory, Money
 
 
 class FnbItem(BaseModel):

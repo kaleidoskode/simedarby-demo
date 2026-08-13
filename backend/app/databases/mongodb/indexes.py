@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 # collection -> list of (keys, options)
 INDEXES: Dict[str, List[Tuple[List[Tuple[str, Any]], Dict[str, Any]]]] = {
     collections.MOVIES: [
-        # Backs GET /movies?q=, searching title and synopsis together.
-        ([("title", pymongo.TEXT), ("synopsis", pymongo.TEXT)],
-         {"name": "movie_text_search"}),
+        # Sort order for the catalogue listing. Search is a case-insensitive
+        # substring match, which no index can serve, so a text index would only
+        # have looked useful without being used; see CatalogServices._contains.
+        ([("title", pymongo.ASCENDING)], {"name": "movie_title"}),
         ([("sections", pymongo.ASCENDING)], {"name": "movie_sections"}),
     ],
     collections.REVIEWS: [

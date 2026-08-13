@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     # Define settings fields with defaults
     root_path: str = ""
     logging_level: str = "INFO"
-    testing: bool = False
 
     # --- Cinema booking API ---------------------------------------------
     title: str = "Cinema Booking API"
@@ -56,6 +55,14 @@ class Settings(BaseSettings):
     # so totals cannot drift through rounding.
     currency: str = "MYR"
     service_charge_minor: int = 50  # RM0.50
+
+    # Screenings are stored in UTC and rendered in the cinema's local time, so
+    # a client in another timezone still sees the correct listing.
+    cinema_timezone: str = "Asia/Kuala_Lumpur"
+
+    # Catalogue paging
+    default_page_size: int = 20
+    max_page_size: int = 100
 
     # Pydantic configuration: read from .env, ignore extra environment variables
     model_config = SettingsConfigDict(
@@ -105,8 +112,7 @@ class Settings(BaseSettings):
         """Constructs the MongoDB URI and returns it along with the database name."""
         try:
             # Fetch credentials for different MongoDB databases
-            mongo_credentials_1 = environment(
-                os.getenv('SYSTEM_ENV'), 'mongo1')  # e.g., 'workshop'
+            mongo_credentials_1 = environment(self.system_env, 'mongo1')
 
             # Validate Mongo credentials using the external `credential_check` function
             credential_check([mongo_credentials_1])
@@ -125,8 +131,7 @@ class Settings(BaseSettings):
     def redis_config(self) -> Dict[str, str]:
         """Constructs the Redis URI used for seat locks and the event stream."""
         try:
-            redis_credentials_1 = environment(
-                os.getenv('SYSTEM_ENV'), 'redis1')
+            redis_credentials_1 = environment(self.system_env, 'redis1')
 
             # Redis commonly runs without authentication in local development,
             # so only the host is mandatory here.
@@ -152,30 +157,6 @@ class Settings(BaseSettings):
             raise ValueError(f"Missing required Redis configuration key: {e}")
         except Exception as e:
             raise ValueError(f"Error constructing Redis URI: {e}")
-
-    @property
-    def mysql_config(self) -> Dict[str, str]:
-        """Constructs the MySQL URI and performs credential validation."""
-        try:
-            # Fetch MySQL credentials for 'mysql1'
-            mysql_credentials_1 = environment(
-                os.getenv('SYSTEM_ENV'), 'mysql1')
-
-            # Validate MySQL credentials using the external `credential_check` function
-            credential_check([mysql_credentials_1])
-
-            # Construct MySQL connection URI
-            mysql_uri_1 = (
-                f'mysql+pymysql://{mysql_credentials_1["username"]}:'
-                f'{mysql_credentials_1["password"]}@{mysql_credentials_1["host"]}/'
-                f'{mysql_credentials_1["db"]}'
-            )
-
-            return {mysql_credentials_1['db']: mysql_uri_1}
-        except KeyError as e:
-            raise ValueError(f"Missing required MySQL configuration key: {e}")
-        except Exception as e:
-            raise ValueError(f"Error constructing MySQL URI: {e}")
 
 
 # Create the settings instance, ensuring .env values and defaults are loaded

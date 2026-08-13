@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.cinema.common_schema import MovieSection
+from app.schemas.common_schema import MovieSection, PageMeta
 
 
 class MovieSummary(BaseModel):
@@ -62,3 +62,15 @@ class RatingBreakdown(BaseModel):
     total: int = Field(..., ge=0, examples=[20])
     counts: dict[int, int] = Field(
         ..., examples=[{5: 8, 4: 6, 3: 4, 2: 2, 1: 0}])
+
+
+class ReviewList(BaseModel):
+    """The Ratings & Reviews tab: the bar chart and the reviews below it.
+
+    Both are returned together because the screen shows them together, and
+    splitting them would make the client issue two calls to draw one view.
+    """
+
+    breakdown: RatingBreakdown
+    items: List[Review]
+    meta: PageMeta

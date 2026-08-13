@@ -27,8 +27,3 @@ class Config:
             raise ValueError(
                 f"Database '{name}' not found in the configuration.")
         return database_url
-
-    @staticmethod
-    def set_testing() -> bool:
-        """Returns whether the application is in testing mode."""
-        return Settings().testing

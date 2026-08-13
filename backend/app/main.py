@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
 from app.databases.mongodb.indexes import ensure_indexes
 from app.databases.redis.dependencies import get_redis, redis_service
+from app.core.logging_config import configure_logging
+from app.routes import auth, fnb, movies, venues
 from fastapi import FastAPI, Request, HTTPException
 import asyncio
 import logging
@@ -17,6 +19,10 @@ import os
 
 
 load_dotenv()
+
+# Configured before anything else so startup and connection messages are not
+# emitted into an unconfigured root logger and lost.
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -129,15 +135,22 @@ async def health_check():
     )
 
 
-# Routers are registered here as each phase lands:
-#   /api/v1/auth, /api/v1/movies, /api/v1/showtimes,
-#   /api/v1/fnb, /api/v1/bookings, /api/v1/ws
+API_V1 = "/api/v1"
+
+app.include_router(auth.router, prefix=f"{API_V1}/auth", tags=["auth"])
+app.include_router(movies.router, prefix=f"{API_V1}/movies", tags=["movies"])
+# Locations, cinemas, halls and showtimes each carry their own tag, so the
+# router is mounted at the API root rather than under a shared prefix.
+app.include_router(venues.router, prefix=API_V1)
+app.include_router(fnb.router, prefix=f"{API_V1}/fnb", tags=["food & beverage"])
+
+# Still to land: seat plan and locking, realtime, bookings, payment.
 
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", 20015)),
+        port=int(os.getenv("PORT", 8000)),
         log_level="debug",
         reload=True,
     )

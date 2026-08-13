@@ -1,5 +1,10 @@
+import logging
+
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
 from app.databases.mongodb.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -13,26 +18,24 @@ class MongoService:
     
     def connect(self, db_name: str) -> AsyncIOMotorDatabase:
         """Establish and return a connection to the specified MongoDB database."""
-        
+
         # If the database connection already exists, reuse it
         if db_name in self.dbs:
             return self.dbs[db_name]
-        
-        # Determine if we're in testing mode
-        if Config.set_testing():
-            from mongomock_motor import AsyncMongoMockClient
-            client = AsyncMongoMockClient()
-            print(f"Using mock MongoDB client for '{db_name}'")
-        else:
-            # Get the MongoDB URL for the given database
-            database_url = Config.set_mongo(db_name)
-            client = AsyncIOMotorClient(database_url)
-            print(f"Connected to MongoDB database: {db_name}")
-        
+
+        database_url = Config.set_mongo(db_name)
+
+        # tz_aware makes the driver return timezone aware datetimes rather than
+        # naive ones. Without it a screening serialises as
+        # "2026-08-14T01:20:00" with no designator, and a client would read that
+        # as local time and show the wrong screening.
+        client = AsyncIOMotorClient(database_url, tz_aware=True)
+        logger.info("Connected to MongoDB database: %s", db_name)
+
         # Store the client and the connected database
         self.clients[db_name] = client
         self.dbs[db_name] = client[db_name]
-        
+
         return self.dbs[db_name]
 
     async def get_database(self, db_name: str) -> AsyncIOMotorDatabase:

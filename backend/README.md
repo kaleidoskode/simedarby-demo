@@ -21,9 +21,9 @@ Then open:
 
 | What | URL |
 | --- | --- |
-| Swagger UI | http://localhost:20015/docs |
-| OpenAPI schema | http://localhost:20015/openapi.json |
-| Health check | http://localhost:20015/health |
+| Swagger UI | http://localhost:8000/docs |
+| OpenAPI schema | http://localhost:8000/openapi.json |
+| Health check | http://localhost:8000/health |
 
 `/health` reports the reachability of each datastore and returns `503` when
 either is unavailable:
@@ -85,6 +85,53 @@ python -m app.main
 
 ---
 
+## Endpoints
+
+All responses use the `{success, message, data}` envelope. Full schemas at
+`/docs`.
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/token` | – | Issue a guest token |
+| GET | `/api/v1/auth/me` | bearer | Resolve the caller from the token |
+| GET | `/api/v1/movies` | – | List or search movies (`q`, `section`, paging) |
+| GET | `/api/v1/movies/{id}` | – | Movie detail |
+| GET | `/api/v1/movies/{id}/reviews` | – | Star breakdown plus reviews |
+| GET | `/api/v1/locations` | – | Location dropdown |
+| GET | `/api/v1/cinemas` | – | Cinema dropdown (`location_id`, `q`) |
+| GET | `/api/v1/halls/{id}` | – | Physical seat layout |
+| GET | `/api/v1/showtimes` | – | Screenings (`movie_id`, `cinema_id`, `date`) |
+| GET | `/api/v1/fnb` | – | Food and beverage (`category`) |
+
+The catalogue is public because the design opens onto the home screen with no
+login. A token is required from seat locking onward, where a request owns
+something and must prove it.
+
+### Getting a token
+
+```bash
+curl -X POST localhost:8000/api/v1/auth/token \
+  -H 'Content-Type: application/json' -d '{"name":"Raymond"}'
+```
+
+In Swagger, paste the returned `access_token` into **Authorize**.
+
+No session is stored. The token carries `sub`, `name`, `iss`, `aud`, `iat` and
+`exp`, and is verified on each request with the algorithm pinned to HS256 —
+accepting whatever the token declares is how `alg: none` and HS/RS confusion
+attacks work.
+
+### Times and dates
+
+Screenings are stored in UTC and served as timezone-aware instants
+(`2026-08-14T01:20:00Z`), alongside a `display_time` already rendered in the
+cinema's timezone. `?date=YYYY-MM-DD` is the date as the user sees it on the
+date strip and is resolved to a local-day window, so an evening screening is
+not pushed into the next day by a UTC comparison. Screenings that have already
+started are excluded unless `include_past=true`.
+
+---
+
 ## Architecture
 
 ```
@@ -116,22 +163,30 @@ booking stays impossible even if Redis is flushed or restarted.
 
 ```
 app/
-├── main.py                  # app factory, lifespan, health check
-├── workers.py               # gunicorn worker class (WebSocket enabled)
+├── main.py                    # app factory, lifespan, health check
+├── workers.py                 # gunicorn worker class (WebSocket enabled)
 ├── core/
-│   ├── config.py            # settings, Mongo/Redis/MySQL URI construction
-│   └── construct_services.py# dependency injection for services
+│   ├── config.py              # settings, Mongo/Redis/MySQL URI construction
+│   ├── construct_services.py  # dependency injection for services
+│   └── security.py            # JWT mint and verify, caller identity
 ├── databases/
-│   ├── mongodb/             # catalog, bookings, seat reservations
-│   ├── redis/               # seat locks, event stream
-│   └── mysql/               # retained from the base, lazily initialised
-├── routes/cinema/           # HTTP and WebSocket endpoints
-├── services/cinema/         # booking logic
-├── schemas/cinema/          # domain models
-├── seed/                    # wireframe dataset + seeder
-├── middleware/              # exception handling, process time logging
-└── helpers/ · utilities/ · classes/
+│   ├── mongodb/               # catalogue, bookings, seat reservations
+│   └── redis/                 # seat locks, event stream
+├── routes/                    # HTTP and WebSocket endpoints
+│   ├── auth.py  movies.py  venues.py  fnb.py
+├── services/                  # query and booking logic
+│   ├── auth_services.py  catalog_services.py
+├── schemas/                   # domain models
+│   ├── common_schema.py  auth_schema.py  movie_schema.py
+│   ├── cinema_schema.py  fnb_schema.py   booking_schema.py
+├── seed/                      # wireframe dataset + seeder
+├── middleware/                # exception handling, process time logging
+└── helpers/ · utilities/      # response envelope, credential resolution
 ```
+
+Routes, services and schemas are flat. The service has one domain, so a
+`cinema/` package inside each would have added a directory level without ever
+holding a second sibling.
 
 ### Collections
 
@@ -166,9 +221,8 @@ to get a running stack; the original files and patterns are otherwise intact.
 
 | File | Change | Why |
 | --- | --- | --- |
-| `app/databases/mysql/db.py` | Engines built lazily | `Database()` ran at import time, so a deployment without MySQL credentials raised `ValueError` before the app could start |
-| `app/databases/mysql/config.py` | URI map resolved lazily | Same reason: the class body called `Settings().mysql_config` at import |
-| `app/databases/mongodb/config.py` | URI map resolved lazily, added `close()` | Consistency, and clean shutdown |
+| `app/databases/mongodb/config.py` | URI map resolved lazily, added `close()` | Avoids requiring credentials at import time, and gives a clean shutdown |
+| `app/databases/mongodb/db.py` | `tz_aware=True` on the client | The driver returns naive datetimes by default, so a screening serialised as `2026-08-14T01:20:00` with no designator and a client would read it as local time |
 | `app/core/config.py` | `MONGO1_SCHEME` / `MONGO1_OPTIONS`, Redis config, JWT and lock settings | The URI was hardcoded to `mongodb+srv://`, which needs DNS SRV records and cannot address a local container |
 | `app/utilities/prefered_environment.py` | Added the `redis1` credential branch | Follows the existing per environment credential pattern |
 | `app/middleware/exception.py` | Stack trace withheld in production | Every `500` returned a traceback in a `debug` field, exposing internal paths |
@@ -182,9 +236,21 @@ to get a running stack; the original files and patterns are otherwise intact.
 
 ### Removed template scaffolding
 
-The base shipped a demo module unrelated to cinema booking, which has been
-deleted rather than left dead in the tree: `routes/fs/`, `services/fs_services.py`,
-`schemas/fs_schema.py` and `classes/fs.py`. The last of these was an SFTP
-client requiring `paramiko`, a dependency this service has no use for.
-`core/construct_services.py` existed only to wire that module and is now the
-injection point for the booking services.
+The base carried a demo file-server module and a set of utilities this service
+never calls. All of it has been deleted rather than left dead in the tree, so
+that everything present is something the booking flow actually uses.
+
+| Removed | Was |
+| --- | --- |
+| `routes/fs/` · `services/fs_services.py` · `schemas/fs_schema.py` · `classes/fs.py` | A demo file server; the last of these an SFTP client needing `paramiko` |
+| `databases/mysql/` · `models/password_models.py` | A password-management schema for a database this service never opens |
+| `utilities/jwt_verifier.py` | RS256 verification, superseded by `core/security.py` |
+| `utilities/mongo_dynamic_connection.py` · `utilities/mysql_dynamic_connection.py` | Multi-tenant connection switching, never called |
+| `utilities/custom_exception_handler.py` | Superseded by the exception middleware |
+| `utilities/generic_response.py` | A duplicate of the one in `helpers/`, which is the one imported |
+| `utilities/logger.py` | Configured logging on import, but nothing imported it |
+| `schemas/app_schema.py` | An enum of unrelated application codes |
+
+Dropping the MySQL layer also took `sqlalchemy` and `pymysql` out of the
+dependency list. `core/construct_services.py` existed only to wire the demo
+module and is now the injection point for the booking services.

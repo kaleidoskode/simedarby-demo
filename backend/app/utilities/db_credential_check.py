@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict
 
 
 def credential_check(credentials: List[Dict[str, str]]) -> None:

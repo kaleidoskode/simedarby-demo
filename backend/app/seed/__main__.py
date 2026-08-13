@@ -2,13 +2,12 @@
 
 import argparse
 import asyncio
-import logging
-import sys
 
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 from app.databases.mongodb import collections
 from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
-from app.schemas.cinema.common_schema import Money
+from app.schemas.common_schema import Money
 from app.seed.seeder import (
     DEMO_MOVIE,
     DEMO_SEAT_PRICE_MINOR,
@@ -17,11 +16,7 @@ from app.seed.seeder import (
     seed,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s] %(message)s",
-    stream=sys.stdout,
-)
+configure_logging()
 
 
 async def main(reset: bool) -> int:

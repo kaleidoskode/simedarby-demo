@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.cinema.common_schema import (
+from app.schemas.common_schema import (
     BookingStatus,
     Money,
     PaymentMethod,

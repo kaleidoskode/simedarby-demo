@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.cinema.common_schema import Money
+from app.schemas.common_schema import Money
 
 
 class Location(BaseModel):

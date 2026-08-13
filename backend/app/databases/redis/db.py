@@ -1,7 +1,11 @@
+import logging
+
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 
 from app.databases.redis.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class RedisService:
@@ -36,7 +40,7 @@ class RedisService:
             health_check_interval=30,
         )
         self.client = Redis(connection_pool=self.pool)
-        print("Connected to Redis")
+        logger.info("Connected to Redis")
 
         return self.client
 

@@ -14,8 +14,3 @@ class Config:
         if cls._url is None:
             cls._url = Settings().redis_config['url']
         return cls._url
-
-    @staticmethod
-    def set_testing() -> bool:
-        """Returns whether the application is in testing mode."""
-        return Settings().testing

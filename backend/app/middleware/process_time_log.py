@@ -1,6 +1,5 @@
 import time
 from fastapi import Request, Response
-from fastapi.middleware.cors import CORSMiddleware
 
 
 async def log(request: Request, call_next):

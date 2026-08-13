@@ -39,9 +39,12 @@ nothing added to the backend's compose file, so `backend/` stays self-contained
 as the assessed deliverable and a reviewer who only wants the API never has to
 touch this.
 
-`NEXT_PUBLIC_API_BASE` defaults to `http://localhost:8000`. It is read by the
-browser, not the container, so it must be the address the browser can reach —
-`http://api:8000` would only resolve inside the compose network.
+`NEXT_PUBLIC_API_BASE` points at the API and defaults to
+`http://localhost:8000`. Set it if the backend is published on another port:
+
+```bash
+NEXT_PUBLIC_API_BASE=http://localhost:9000 npm run dev
+```
 
 ## Showing the real-time locking
 
@@ -94,9 +97,14 @@ app/…               one route per node of the 2.0 flowchart
 
 Two decisions worth knowing:
 
-**Money is never computed here.** Amounts arrive as integer minor units with a
-preformatted `display` string. The client renders what the server says, so
-there is exactly one place a total can be wrong.
+**Money is rendered, not computed.** Every authoritative amount arrives with a
+preformatted `display` string and is shown as-is, so there is one place a total
+can be wrong. The two exceptions are the live sub-totals shown *before* a
+booking exists — while seats are being picked, and while food quantities are
+being adjusted — where there is nothing yet to ask the server for. Those go
+through `lib/money.ts`, which takes the currency from the API rather than
+assuming it, and both are replaced by server-computed amounts the moment the
+booking is created.
 
 **A seat click does not update the grid.** It calls the API and waits for the
 change to arrive over the socket, the same path another user's change takes.

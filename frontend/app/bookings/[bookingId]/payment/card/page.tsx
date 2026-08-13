@@ -9,8 +9,7 @@
  * original charge instead of billing again.
  */
 
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
@@ -60,7 +59,8 @@ export default function CardPaymentPage() {
     try {
       await api.pay(
         bookingId,
-        { method: "debit_card", card: { number, expiry, cvv } },
+        { method: "debit_card", card: { number, expiry, cvv },
+          save_card: saveCard },
         session.token,
         idempotencyKey,
       );

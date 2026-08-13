@@ -31,12 +31,35 @@ function randomName(): string {
   return GUEST_NAMES[Math.floor(Math.random() * GUEST_NAMES.length)];
 }
 
-export function readSession(): Session | null {
+/** Seconds of remaining life below which a token is treated as spent. */
+const EXPIRY_MARGIN_SECONDS = 60;
+
+/** Whether a token has expired, or is close enough that it soon will.
+ *
+ * Read without verifying the signature, which is fine because this decides
+ * only whether to bother asking; the server verifies properly and would reject
+ * a forged one. Tokens last an hour, and a demo left open for longer would
+ * otherwise fail at the WebSocket handshake with an unexplained 403.
+ */
+function isSpent(token: string): boolean {
+  try {
+    const [, payload] = token.split(".");
+    const { exp } = JSON.parse(atob(payload)) as { exp?: number };
+    if (!exp) return false;
+    return exp - Date.now() / 1000 < EXPIRY_MARGIN_SECONDS;
+  } catch {
+    // Unreadable means unusable.
+    return true;
+  }
+}
+
+function readSession(): Session | null {
   if (typeof window === "undefined") return null;
 
   const token = sessionStorage.getItem(TOKEN_KEY);
   const user = sessionStorage.getItem(USER_KEY);
   if (!token || !user) return null;
+  if (isSpent(token)) return null;
 
   try {
     return { token, user: JSON.parse(user) as CurrentUser };
@@ -63,9 +86,4 @@ export async function newSession(name?: string): Promise<Session> {
   const session = { token: issued.access_token, user: issued.user };
   writeSession(session);
   return session;
-}
-
-export function clearSession(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(USER_KEY);
 }

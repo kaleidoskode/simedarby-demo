@@ -16,13 +16,20 @@ from typing import List
 import httpx
 import pytest
 import pytest_asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
 from redis.asyncio import Redis
 
+from app.databases.mongodb import collections
+from app.databases.mongodb.config import Config as MongoConfig
 from app.databases.redis.config import Config
 from app.seed.seeder import demo_showtime_id
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8000")
 API = f"{BASE_URL}/api/v1"
+
+# The booking that owns the wireframe's crossed-out seats. It is part of the
+# seeded fixture, so cleanup between tests must leave it alone.
+SEEDED_BOOKING_ID = "bkg_seeded_taken"
 
 
 @pytest_asyncio.fixture
@@ -62,17 +69,39 @@ async def showtime_id(api) -> str:
     return wanted
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def clean_locks(redis):
-    """Clear every seat lock before and after each test.
+@pytest_asyncio.fixture
+async def mongo():
+    """Direct MongoDB access, for undoing what a test wrote."""
+    database = os.environ["MONGO1_DB"]
+    client = AsyncIOMotorClient(MongoConfig.set_mongo(database), tz_aware=True)
+    yield client[database]
+    client.close()
 
-    Without this a lock left by one test would make the next one fail for the
-    wrong reason, and the TTL is long enough that tests cannot wait it out.
+
+@pytest_asyncio.fixture(autouse=True)
+async def clean_state(redis, mongo):
+    """Return the database and Redis to their seeded state around each test.
+
+    Locks are cleared because one left behind makes the next test fail for the
+    wrong reason, and the TTL is too long to wait out.
+
+    Bookings and reservations are cleared because paying writes a *permanent*
+    seat reservation. Without this the suite consumes seats on every run and
+    eventually fails when the hall is full — passing on a fresh database and
+    failing on the second run, which is worse than failing outright.
+
+    The seeded booking is kept, since the crossed-out seats from the wireframe
+    are part of the fixture rather than test output.
     """
     async def purge():
         keys = [key async for key in redis.scan_iter(match="lock:*", count=500)]
         if keys:
             await redis.delete(*keys)
+
+        await mongo[collections.BOOKINGS].delete_many(
+            {"_id": {"$ne": SEEDED_BOOKING_ID}})
+        await mongo[collections.SEAT_RESERVATIONS].delete_many(
+            {"booking_id": {"$ne": SEEDED_BOOKING_ID}})
 
     await purge()
     yield

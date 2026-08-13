@@ -8,8 +8,7 @@
  * then confirmed, and makes the call safe to repeat.
  */
 
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
@@ -21,6 +20,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import { api } from "@/lib/api";
+import { formatMinor } from "@/lib/money";
 import { useSession } from "@/lib/SessionProvider";
 import type { FnbCategory, FnbItem } from "@/lib/types";
 
@@ -73,6 +73,9 @@ export default function FnbPage() {
   };
 
   const visible = items?.filter((item) => item.category === tab) ?? [];
+  // Taken from the catalogue rather than assumed, so the preview cannot
+  // claim a currency the items are not priced in.
+  const currency = items?.[0]?.price.currency ?? "MYR";
   const totalItems = Object.values(quantities).reduce((sum, n) => sum + n, 0);
   const subtotalMinor =
     items?.reduce(
@@ -178,7 +181,7 @@ export default function FnbPage() {
           </div>
           <div className="text-right">
             <p className="text-[10px] uppercase tracking-wide text-muted">Sub-total</p>
-            <p className="font-semibold">RM{(subtotalMinor / 100).toFixed(2)}</p>
+            <p className="font-semibold">{formatMinor(subtotalMinor, currency)}</p>
           </div>
         </div>
         <PrimaryButton onClick={() => void submit(false)} disabled={saving}>

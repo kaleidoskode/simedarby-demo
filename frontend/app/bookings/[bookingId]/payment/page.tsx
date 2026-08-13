@@ -7,8 +7,7 @@
  * branch in the design's payment flow. The other two methods confirm directly.
  */
 
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ErrorNote, ScreenHeader, Spinner } from "@/components/ui";

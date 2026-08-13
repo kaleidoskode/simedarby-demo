@@ -33,6 +33,14 @@ export type ConnectionState = "connecting" | "live" | "reconnecting" | "offline"
 const HEARTBEAT_MS = 45_000;
 const RECONNECT_DELAY_MS = 1_500;
 
+/** Give up after this many failures rather than reconnecting forever.
+ *
+ * A socket refused for a reason retrying cannot fix — an expired token, a
+ * screening that no longer exists — would otherwise be retried indefinitely,
+ * filling the console and hiding the real problem behind a generic message.
+ */
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 type UseSeatPlan = {
   plan: SeatPlan | null;
   connection: ConnectionState;
@@ -135,6 +143,7 @@ export function useSeatPlan(
     if (!showtimeId) return;
 
     closedByUsRef.current = false;
+    let attempts = 0;
 
     const connect = () => {
       setConnection((current) =>
@@ -145,6 +154,7 @@ export function useSeatPlan(
       socketRef.current = socket;
 
       socket.onopen = () => {
+        attempts = 0;
         setConnection("live");
         setError(null);
       };
@@ -166,11 +176,22 @@ export function useSeatPlan(
       };
 
       socket.onerror = () => {
-        setError("Lost the live connection to the seating plan");
+        // The close handler decides what to do; a bare error is not actionable
+        // on its own and the browser gives no reason here.
       };
 
       socket.onclose = () => {
         if (closedByUsRef.current) return;
+
+        attempts += 1;
+        if (attempts > MAX_RECONNECT_ATTEMPTS) {
+          setConnection("offline");
+          setError(
+            "Lost the live connection. Your session may have expired — " +
+            "reload the page to continue.",
+          );
+          return;
+        }
 
         setConnection("reconnecting");
         reconnectRef.current = setTimeout(() => {

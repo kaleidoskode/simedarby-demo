@@ -8,8 +8,7 @@
  * a refresh, which is the behaviour the whole backend is built around.
  */
 
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { SeatGrid } from "@/components/SeatGrid";
@@ -22,6 +21,7 @@ import {
 } from "@/components/ui";
 import { useSeatPlan } from "@/hooks/useSeatPlan";
 import { ApiError, api } from "@/lib/api";
+import { formatMinor } from "@/lib/money";
 import { useSession } from "@/lib/SessionProvider";
 import type {
   CinemaSummary,
@@ -298,9 +298,7 @@ export default function BookingPage() {
               <p className="text-[10px] uppercase tracking-wide text-muted">Sub-total</p>
               <p className="font-semibold">
                 {selectedShowtime
-                  ? `${selectedShowtime.price.currency === "MYR" ? "RM" : ""}${(
-                      subtotal / 100
-                    ).toFixed(2)}`
+                  ? formatMinor(subtotal, selectedShowtime.price.currency)
                   : "—"}
               </p>
             </div>

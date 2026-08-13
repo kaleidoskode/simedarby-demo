@@ -76,10 +76,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(`${V1}${path}`, {
     method,
-    // Deliberately not `credentials: "include"`. The API answers with
-    // `Allow-Origin: *` alongside `Allow-Credentials: true`, a combination
-    // browsers reject for credentialed requests. Auth is a bearer header, so
-    // the default omit is both correct and what works.
+    // Credentials are deliberately left at the default. Authentication is a
+    // bearer header rather than a cookie, so `credentials: "include"` would
+    // gain nothing and would require the API to name an exact origin instead
+    // of allowing any.
     headers: {
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -206,9 +206,6 @@ export const api = {
       token,
     }),
 
-  cancelBooking: (bookingId: string, token: string) =>
-    request<Booking>(`/bookings/${bookingId}`, { method: "DELETE", token }),
-
   // --- payment ------------------------------------------------------------
 
   listPaymentMethods: () => request<PaymentMethodOption[]>("/payment-methods"),
@@ -218,6 +215,7 @@ export const api = {
     body: {
       method: PaymentMethod;
       card?: { number: string; expiry: string; cvv: string };
+      save_card?: boolean;
     },
     token: string,
     idempotencyKey: string,

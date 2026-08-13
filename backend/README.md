@@ -150,6 +150,28 @@ tests/test_seat_lock_concurrency.py ..........
 57 passed
 ```
 
+### Demo web client
+
+A small Next.js app in [`../frontend`](../frontend) walks the whole booking
+journey against this API.
+
+```bash
+docker compose --profile demo up --build     # adds the client on :3000
+```
+
+It sits behind a compose profile, so a plain `docker compose up` still brings up
+only the API and its datastores rather than making anyone wait for a Next.js
+build.
+
+**It is not a submission for 4.1**, which asks for a mobile app in React Native
+or Flutter. It is a web app on purpose so it cannot be mistaken for one. It
+exists because a seat locking the instant another user takes it is the one
+thing in this API that Swagger cannot show: open the seating plan in two browser
+windows and it is obvious immediately.
+
+Building it also found a real defect here, recorded in the table below: error
+responses were reaching browsers without CORS headers.
+
 ### Running without Docker
 
 ```bash
@@ -570,6 +592,7 @@ to get a running stack; the original files and patterns are otherwise intact.
 | `app/core/config.py` | `MONGO1_SCHEME` / `MONGO1_OPTIONS`, Redis config, JWT and lock settings | The URI was hardcoded to `mongodb+srv://`, which needs DNS SRV records and cannot address a local container |
 | `app/utilities/prefered_environment.py` | Added the `redis1` credential branch | Follows the existing per environment credential pattern |
 | `app/middleware/exception.py` | Stack trace withheld in production | Every `500` returned a traceback in a `debug` field, exposing internal paths |
+| `app/main.py` | CORS made the outermost middleware, `allow_credentials=False` | `add_middleware` prepends, so registering the exception handler last put it *outside* CORS and its `4xx` responses never passed back through. Every error reached a browser with no `Access-Control-Allow-Origin` and was blocked, including the `409` naming contested seats. Credentials are off because auth is a bearer header, and pairing them with `allow_origins=["*"]` is invalid |
 | `app/workers.py` | **Added** | `gunicorn_conf.py` referenced `app.workers.ConfigurableWorker`, which did not exist, so the Docker entrypoint failed on start |
 | `app/core/logging_config.py` | **Added** | Nothing configured logging, so the root logger sat at WARNING with no handlers: every `logger.info` was discarded and `logger.error` escaped only through Python's unformatted fallback, including the middleware's stack traces |
 | `Dockerfile` | Debian slim, no `.env` / key COPY | The build copied `.data/*.key` files that are not in the repo, so it failed; Alpine also had no wheels for the old dependency set |

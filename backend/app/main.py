@@ -90,15 +90,27 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Registration order matters, and it is the reverse of what it looks like:
+# add_middleware prepends, so the middleware added *last* is the outermost.
+#
+# CORS must be outermost. When the exception handler was outside it, the
+# JSONResponse it returns for a 4xx never passed back through CORS, so every
+# error reached a browser with no Access-Control-Allow-Origin and was blocked.
+# The API's careful 409 payloads naming the contested seats were unreadable to
+# exactly the clients that needed them.
+app.add_middleware(ExceptionHandler)
+app.middleware("http")(process_time_log.log)
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
+    # False, not True: authentication is a bearer header rather than a cookie,
+    # so no credentialed request is ever made. Pairing allow_credentials with
+    # allow_origins=["*"] is invalid anyway — browsers reject the combination —
+    # and turning it off is what makes the wildcard legitimate.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_origins=["*"],
 )
-app.middleware("http")(process_time_log.log)
-app.add_middleware(ExceptionHandler)
 
 
 @app.middleware("http")

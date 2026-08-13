@@ -28,6 +28,31 @@ services:
     stdin_open: true
     tty: true
 
+  # The demo web client. Behind a profile because it is not part of the 4.3
+  # deliverable and building it takes minutes, which someone who only wants the
+  # API should not have to wait for.
+  #
+  #   docker compose up                    api, mongo, redis
+  #   docker compose --profile demo up     the above plus the web client
+  web:
+    profiles: ["demo"]
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle, so it must be the address the browser
+        # uses. `http://api:8000` would only resolve inside the network.
+        NEXT_PUBLIC_API_BASE: "http://localhost:${PORT:-8000}"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - cinema-network
+    image: "cinema-booking-web:1.0.0"
+    restart: unless-stopped
+
   mongo:
     image: mongo:7
     environment:

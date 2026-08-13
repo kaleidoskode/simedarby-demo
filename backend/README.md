@@ -39,10 +39,16 @@ notice. See [Tests](#tests).
 
 ## Running it
 
+Docker is the only prerequisite. From a clone of the repository:
+
 ```bash
-cp .env.example .env
-docker compose up --build
+cd backend
+cp .env.example .env       # config; the defaults work as shipped
+docker compose up --build  # api on :8000, plus MongoDB and Redis
 ```
+
+`.env` is not committed, so it is copied from the template. The service refuses
+to start without it rather than booting with placeholder credentials.
 
 Then open:
 
@@ -66,9 +72,18 @@ either is unavailable:
 
 ### Seeding the demo data
 
+The API starts with an empty database, so this is required before there is
+anything to browse:
+
 ```bash
 docker compose exec api python -m app.seed --reset
 ```
+
+`--reset` **drops** the collections rather than emptying them, so indexes are
+rebuilt from the current declarations instead of surviving from an earlier
+schema. Without the flag the seeder upserts, repairing existing documents and
+leaving anything else alone. Either way it is safe to re-run, and it is the way
+back to a clean, known state.
 
 The dataset follows the wireframes structurally — the A–H seating plan with the
 same crossed-out seats, the 9:20AM–9:20PM screenings, the combo line-up — but

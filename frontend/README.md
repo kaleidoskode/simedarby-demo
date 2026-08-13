@@ -85,6 +85,12 @@ card; nothing is reserved until the charge succeeds.
 
 ## How it is put together
 
+**Next.js 16** with the App Router, **React 19**, **TypeScript** and
+**Tailwind CSS 4**. No state library and no data-fetching library: every screen
+reads from the API through one small client, and the only long-lived state is
+the WebSocket behind the seating plan. For nine screens that talk to one
+service, anything more would be scaffolding around scaffolding.
+
 ```
 lib/types.ts        mirrors the API schemas
 lib/api.ts          fetch wrapper; unwraps {success, message, data} and turns a

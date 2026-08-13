@@ -7,22 +7,81 @@ and showing that change to everyone else in real time. That is what this is
 built around, and what the material below is arranged to let you verify.
 
 ```
-backend/     the submission — a FastAPI service, MongoDB and Redis
-frontend/    a proof of concept, not part of the assessment
+backend/     the submission      FastAPI · MongoDB · Redis · Docker
+frontend/    a proof of concept  Next.js · React · TypeScript
 ```
 
 ---
 
 ## Start here
 
+**Docker** is all you need for the submission. The optional demo client in
+`frontend/` additionally needs **Node 20+**.
+
 ```bash
-cd backend
-cp .env.example .env
-docker compose up --build
-docker compose exec api python -m app.seed --reset
+git clone https://github.com/kaleidoskode/simedarby-demo.git
+cd simedarby-demo/backend
+
+cp .env.example .env                              # 1. configuration
+docker compose up -d --build                      # 2. API, MongoDB, Redis
+docker compose exec api python -m app.seed --reset # 3. demo data
 ```
 
+**1 — configuration.** `.env` is not committed, so it is copied from the
+template. The defaults in `.env.example` work with the compose file as shipped;
+nothing needs editing. The API refuses to start without it rather than booting
+with placeholder credentials, so a missing file says so plainly.
+
+**2 — the stack.** Three containers: the API on port 8000, MongoDB and Redis.
+The first build takes a couple of minutes; afterwards it is seconds. The command
+returns once MongoDB and Redis report healthy and the API has started; the API
+itself begins answering a few seconds later. Step 3 can follow immediately
+regardless, because the seeder talks to MongoDB directly rather than through the
+API. `docker compose logs -f api` follows the logs.
+
+**3 — demo data.**
+
+The API starts with an empty database, so this fills it with
+the dataset from the assignment's wireframes: *Venom: Let There Be Carnage* and
+three other films, GSC Mid Valley Megamall and two more cinemas across Kuala
+Lumpur, Selangor and Penang, the A–H seating plan with the same crossed-out
+seats as the design, and the food menu at its wireframe pricing.
+
+Screenings are generated for the **next seven days relative to today**, so the
+data never goes stale. The design shows dates in November 2021, and screenings
+fixed to a past month would be filtered out by every showtime query as already
+started.
+
+`--reset` drops the collections first, so indexes are rebuilt from the current
+declarations rather than lingering from an earlier schema. Run it again at any
+point to return to a clean, known state.
+
+It prints what it created, and re-derives the Booking Summary total from the
+seeded prices as a check that the data still matches the design. **Your dates
+will differ** — they are relative to the day you run it:
+
+```
+Demo screening from the wireframe
+  showtime_id   sho_20260815_1740_gsc_mv_1
+  movie         Venom: Let There Be Carnage
+  cinema        GSC Mid Valley Megamall
+  when          Aug 15, 2026 5:40PM (Asia/Kuala_Lumpur)
+  already sold  B5, B6, C2, C3, D4, D5, E3, E4, E5, E6, E7
+
+Booking Summary check (seats F4, F5 + Fresh XL Combo)
+  Tickets           RM50.00
+  Food & Bev        RM54.00
+  Service charge     RM0.50
+  Total            RM104.50
+  matches the wireframe breakdown, at RM104.50
+```
+
+Note the **date it prints** — that is the screening carrying the wireframe's
+sold seats, and the one to pick when
+[demonstrating the seat locking](#seeing-the-seat-locking-frontend).
+
 That is the whole setup. Nothing else to install, no credentials to obtain.
+`docker compose down -v` removes everything again, containers and data.
 
 | | |
 | --- | --- |
@@ -96,10 +155,14 @@ except the behaviour the assignment is actually built around: a seat locking
 the instant another user takes it. A JSON response cannot show that. Two
 browser windows can, in about three seconds.
 
-With the backend already running:
+Built with **Next.js 16** (App Router), **React 19**, **TypeScript** and
+**Tailwind CSS 4**. It holds no state of its own: every screen reads from the
+API, and the seating plan is driven by the WebSocket rather than by polling.
+
+With the backend already running, from `backend/`:
 
 ```bash
-cd frontend
+cd ../frontend
 npm install
 npm run dev          # http://localhost:3000
 ```

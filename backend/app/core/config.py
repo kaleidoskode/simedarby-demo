@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     checkout_lock_ttl_seconds: int = 600
     max_seats_per_booking: int = 10
 
+    # Money is held in minor units (sen for MYR) as integers, never floats,
+    # so totals cannot drift through rounding.
+    currency: str = "MYR"
+    service_charge_minor: int = 50  # RM0.50
+
     # Pydantic configuration: read from .env, ignore extra environment variables
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore", env_prefix="APP_")

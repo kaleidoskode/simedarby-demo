@@ -1,0 +1,157 @@
+[
+  {
+    "_id": "fnb_tasty_combo",
+    "category": "combo",
+    "name": "Tasty Combo",
+    "description": "2 Shawarma, Pack of fries & Pepsi",
+    "price_minor": 3500,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Tasty+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_fresh_xl_combo",
+    "category": "combo",
+    "name": "Fresh XL Combo",
+    "description": "Double large popcorn and 4 pepsi",
+    "comment": "Discounted item from the wireframe: RM60.00 struck through, RM54.00 payable.",
+    "price_minor": 5400,
+    "original_price_minor": 6000,
+    "discount_pct": 10,
+    "image_url": "https://placehold.co/300x200?text=Fresh+XL+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_yummy_combo",
+    "category": "combo",
+    "name": "Yummy combo",
+    "description": "2 hotdogs, 2 Lays chips & 4 pepsi",
+    "price_minor": 6500,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Yummy+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_fresh_combo",
+    "category": "combo",
+    "name": "Fresh Combo",
+    "description": "Large popcorn & candy with pepsi",
+    "price_minor": 2500,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Fresh+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_special_combo",
+    "category": "combo",
+    "name": "Special Combo",
+    "description": "Chicken Shawarma & Pack of fries",
+    "price_minor": 2550,
+    "original_price_minor": 3000,
+    "discount_pct": 15,
+    "image_url": "https://placehold.co/300x200?text=Special+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_delight_combo",
+    "category": "combo",
+    "name": "Delight Combo",
+    "description": "Double pack medium popcorn",
+    "price_minor": 2000,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Delight+Combo",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_large_popcorn",
+    "category": "food_snacks",
+    "name": "Large Popcorn",
+    "description": "Freshly popped, salted or caramel",
+    "price_minor": 1500,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Large+Popcorn",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_chicken_shawarma",
+    "category": "food_snacks",
+    "name": "Chicken Shawarma",
+    "description": "Grilled chicken wrap with garlic sauce",
+    "price_minor": 1800,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Shawarma",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_hotdog",
+    "category": "food_snacks",
+    "name": "Classic Hotdog",
+    "description": "Beef sausage with mustard and onions",
+    "price_minor": 1200,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Hotdog",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_lays_chips",
+    "category": "food_snacks",
+    "name": "Lays Chips",
+    "description": "Sharing pack, choice of flavour",
+    "price_minor": 600,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Lays",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_pepsi_large",
+    "category": "beverages",
+    "name": "Pepsi (Large)",
+    "description": "600ml chilled",
+    "price_minor": 700,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Pepsi",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_bottled_water",
+    "category": "beverages",
+    "name": "Bottled Water",
+    "description": "50cl still water",
+    "price_minor": 300,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Water",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_fruit_juice",
+    "category": "beverages",
+    "name": "Marigold Fruit Juice",
+    "description": "100% juice, orange or tropical",
+    "price_minor": 900,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Juice",
+    "is_available": true
+  },
+  {
+    "_id": "fnb_iced_coffee",
+    "category": "beverages",
+    "name": "Iced Coffee",
+    "description": "Cold brew with milk",
+    "price_minor": 1100,
+    "original_price_minor": null,
+    "discount_pct": null,
+    "image_url": "https://placehold.co/300x200?text=Iced+Coffee",
+    "is_available": false
+  }
+]

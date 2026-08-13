@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
+from app.databases.mongodb.indexes import ensure_indexes
 from app.databases.redis.dependencies import get_redis, redis_service
 from fastapi import FastAPI, Request, HTTPException
 import asyncio
@@ -44,8 +45,11 @@ immediately.
 async def lifespan(app: FastAPI):
     """Open the datastore connections on boot and release them on shutdown."""
     try:
-        await get_mongo_db1()
+        mongo_db = await get_mongo_db1()
         await get_redis()
+        # Declaring an index that already matches is a no-op, so this is safe
+        # to run on every boot and on every worker.
+        await ensure_indexes(mongo_db)
     except Exception as exc:
         # Surface the cause instead of failing later on the first request.
         logger.error("Startup connection failure: %s", exc, exc_info=True)

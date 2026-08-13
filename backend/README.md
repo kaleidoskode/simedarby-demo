@@ -37,6 +37,43 @@ either is unavailable:
 }
 ```
 
+### Seeding the demo data
+
+```bash
+docker compose exec api python -m app.seed --reset
+```
+
+The dataset follows the wireframes structurally — the A–H seating plan with the
+same crossed-out seats, the 9:20AM–9:20PM screenings, the combo line-up — but
+is localised to Malaysia: GSC Mid Valley Megamall, TGV Sunway Pyramid and GSC
+Gurney Plaza across Kuala Lumpur, Selangor and Penang, priced in MYR, with
+screening times computed in `Asia/Kuala_Lumpur`. The design shows Nigerian
+cinemas and naira, which would read oddly in a Malaysian product.
+
+The seeder prints the demo `showtime_id` and re-derives the Booking Summary
+total, so a drift in seed prices is caught immediately rather than noticed
+against the design later:
+
+```
+Tickets           RM50.00     seats F4, F5 @ RM25.00
+Food & Bev        RM54.00     Fresh XL Combo, 10% off RM60.00
+Service charge     RM0.50
+Total            RM104.50     matches the wireframe breakdown
+```
+
+Prices are in **MYR**, held as integer minor units (sen). The wireframe is
+priced in naira, where a ticket is ₦2,500; the same figures are used at
+Malaysian scale, so a ticket is RM25.00 and the ₦10,450 total reads as
+RM104.50. The breakdown is unchanged, only the scale.
+
+Screenings are generated for the next 7 days relative to the run date. The
+design shows November 2021, and screenings fixed to a past month would be
+filtered out by every showtime query, so only the times of day are taken
+literally.
+
+Note that the image copies the source at build time, so `docker compose up -d
+--build` is needed for code changes to reach the container.
+
 ### Running without Docker
 
 ```bash
@@ -90,9 +127,34 @@ app/
 │   └── mysql/               # retained from the base, lazily initialised
 ├── routes/cinema/           # HTTP and WebSocket endpoints
 ├── services/cinema/         # booking logic
-├── schemas/cinema/          # request and response models
+├── schemas/cinema/          # domain models
+├── seed/                    # wireframe dataset + seeder
 ├── middleware/              # exception handling, process time logging
 └── helpers/ · utilities/ · classes/
+```
+
+### Collections
+
+| Collection | Holds | Notable index |
+| --- | --- | --- |
+| `movies` | Catalogue | text index on title + synopsis for search |
+| `reviews` | Customer reviews | by movie, most recent first |
+| `locations` · `cinemas` · `halls` | Venues and seat layouts | cinema by location, hall by cinema |
+| `showtimes` | Screenings | by movie and by cinema, both with start time |
+| `fnb_items` | Food and drink | by category |
+| `bookings` | Booking lifecycle | unique reference; status + expiry |
+| `seat_reservations` | Permanently sold seats | **unique `(showtime_id, seat)`** |
+
+That last index is the guarantee behind first come first serve. A Redis lock
+stops two users reaching checkout for the same seat, but a lock can be lost to
+a restart or an eviction. The unique index makes a seat impossible to sell
+twice inside the database itself, whatever the application layer believed:
+
+```
+insert a second reservation for a sold seat
+  -> E11000 duplicate key error (uniq_showtime_seat)
+the same seat on a different showtime
+  -> accepted, so the constraint is scoped to the screening
 ```
 
 ---

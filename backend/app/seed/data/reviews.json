@@ -1,0 +1,182 @@
+[
+  {
+    "_id": "rev_venom_01",
+    "movie_id": "mov_venom_carnage",
+    "author": "Aisyah R.",
+    "stars": 4,
+    "title": "INTERESTING MOVIE!",
+    "body": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Non sed risus elementum ac, in. The pacing held up all the way through and the symbiote scenes were worth the ticket.",
+    "days_ago": 2
+  },
+  {
+    "_id": "rev_venom_02",
+    "movie_id": "mov_venom_carnage",
+    "author": "Wei Ming T.",
+    "stars": 2,
+    "title": "NOTHING SPECIAL",
+    "body": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Tortor enim auctor aliquet lorem vitae. Felt short and the plot was thin in the middle act.",
+    "days_ago": 3
+  },
+  {
+    "_id": "rev_venom_03",
+    "movie_id": "mov_venom_carnage",
+    "author": "Rajesh K.",
+    "stars": 5,
+    "title": "CARNAGE DELIVERED",
+    "body": "Woody Harrelson was the highlight. Every scene he was in lifted the film.",
+    "days_ago": 4
+  },
+  {
+    "_id": "rev_venom_04",
+    "movie_id": "mov_venom_carnage",
+    "author": "Nurul H.",
+    "stars": 5,
+    "title": "BETTER THAN THE FIRST",
+    "body": "Tighter, funnier and the effects were a clear step up from the original.",
+    "days_ago": 5
+  },
+  {
+    "_id": "rev_venom_05",
+    "movie_id": "mov_venom_carnage",
+    "author": "Farid A.",
+    "stars": 5,
+    "title": "GREAT NIGHT OUT",
+    "body": "Went with friends and everyone enjoyed it. The banter between Eddie and Venom carries the whole thing.",
+    "days_ago": 6
+  },
+  {
+    "_id": "rev_venom_06",
+    "movie_id": "mov_venom_carnage",
+    "author": "Mei Ling C.",
+    "stars": 4,
+    "title": "SOLID SEQUEL",
+    "body": "Does exactly what it sets out to do. Not deep, but never boring.",
+    "days_ago": 7
+  },
+  {
+    "_id": "rev_venom_07",
+    "movie_id": "mov_venom_carnage",
+    "author": "Hafiz M.",
+    "stars": 5,
+    "title": "TOM HARDY IS BRILLIANT",
+    "body": "Playing both halves of that relationship is not easy and he makes it look effortless.",
+    "days_ago": 8
+  },
+  {
+    "_id": "rev_venom_08",
+    "movie_id": "mov_venom_carnage",
+    "author": "Priya S.",
+    "stars": 3,
+    "title": "DECENT BUT SHORT",
+    "body": "Enjoyable while it lasted, though at 1h37m it ends just as it gets going.",
+    "days_ago": 9
+  },
+  {
+    "_id": "rev_venom_09",
+    "movie_id": "mov_venom_carnage",
+    "author": "Zaid I.",
+    "stars": 5,
+    "title": "LOVED THE 3D",
+    "body": "Worth paying for the IMDb 3D screening, the action reads much better.",
+    "days_ago": 10
+  },
+  {
+    "_id": "rev_venom_10",
+    "movie_id": "mov_venom_carnage",
+    "author": "Siti N.",
+    "stars": 4,
+    "title": "FUN THROUGHOUT",
+    "body": "Leans into the comedy far more than the first film and is better for it.",
+    "days_ago": 11
+  },
+  {
+    "_id": "rev_venom_11",
+    "movie_id": "mov_venom_carnage",
+    "author": "Daniel L.",
+    "stars": 5,
+    "title": "EXCELLENT VILLAIN",
+    "body": "Cletus Kasady is genuinely unsettling and the final confrontation earns it.",
+    "days_ago": 12
+  },
+  {
+    "_id": "rev_venom_12",
+    "movie_id": "mov_venom_carnage",
+    "author": "Kavitha R.",
+    "stars": 3,
+    "title": "MIXED FEELINGS",
+    "body": "Strong opening and ending, but the middle section drags a little.",
+    "days_ago": 13
+  },
+  {
+    "_id": "rev_venom_13",
+    "movie_id": "mov_venom_carnage",
+    "author": "Amirul B.",
+    "stars": 4,
+    "title": "GOOD POPCORN FILM",
+    "body": "Exactly what you want on a Friday evening. No more, no less.",
+    "days_ago": 14
+  },
+  {
+    "_id": "rev_venom_14",
+    "movie_id": "mov_venom_carnage",
+    "author": "Jia Hui W.",
+    "stars": 5,
+    "title": "WATCHED IT TWICE",
+    "body": "Caught details the second time that I missed on the first viewing.",
+    "days_ago": 15
+  },
+  {
+    "_id": "rev_venom_15",
+    "movie_id": "mov_venom_carnage",
+    "author": "Syafiq O.",
+    "stars": 4,
+    "title": "WORTH SEEING",
+    "body": "Not a masterpiece but a genuinely entertaining hour and a half.",
+    "days_ago": 16
+  },
+  {
+    "_id": "rev_venom_16",
+    "movie_id": "mov_venom_carnage",
+    "author": "Ravi N.",
+    "stars": 3,
+    "title": "AVERAGE STORY",
+    "body": "The effects carry a fairly thin script, but the leads are watchable.",
+    "days_ago": 17
+  },
+  {
+    "_id": "rev_venom_17",
+    "movie_id": "mov_venom_carnage",
+    "author": "Lina A.",
+    "stars": 5,
+    "title": "HUGELY ENJOYABLE",
+    "body": "The chemistry between the two central characters is the whole appeal.",
+    "days_ago": 18
+  },
+  {
+    "_id": "rev_venom_18",
+    "movie_id": "mov_venom_carnage",
+    "author": "Haziq Z.",
+    "stars": 4,
+    "title": "STRONG ACTION",
+    "body": "The set pieces are well staged and easy to follow, which is rarer than it should be.",
+    "days_ago": 19
+  },
+  {
+    "_id": "rev_venom_19",
+    "movie_id": "mov_venom_carnage",
+    "author": "Yee Ling L.",
+    "stars": 3,
+    "title": "OKAY OVERALL",
+    "body": "Fine for a night out, though it does not really add anything new.",
+    "days_ago": 20
+  },
+  {
+    "_id": "rev_venom_20",
+    "movie_id": "mov_venom_carnage",
+    "author": "Faizal S.",
+    "stars": 2,
+    "title": "EXPECTED MORE",
+    "body": "The trailer promised a heavier film than the one that was delivered.",
+    "days_ago": 21
+  }
+]

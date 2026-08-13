@@ -1,0 +1,29 @@
+[
+  {
+    "_id": "cin_gsc_midvalley",
+    "name": "GSC Mid Valley Megamall",
+    "location_id": "loc_kuala_lumpur",
+    "price_from_minor": 2000,
+    "price_to_minor": 5000,
+    "currency": "MYR",
+    "is_active": true
+  },
+  {
+    "_id": "cin_tgv_sunway",
+    "name": "TGV Sunway Pyramid",
+    "location_id": "loc_selangor",
+    "price_from_minor": 1500,
+    "price_to_minor": 4500,
+    "currency": "MYR",
+    "is_active": true
+  },
+  {
+    "_id": "cin_gsc_gurney",
+    "name": "GSC Gurney Plaza",
+    "location_id": "loc_penang",
+    "price_from_minor": 1800,
+    "price_to_minor": 4800,
+    "currency": "MYR",
+    "is_active": true
+  }
+]

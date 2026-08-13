@@ -1,0 +1,147 @@
+[
+  {
+    "_id": "mov_venom_carnage",
+    "title": "Venom: Let There Be Carnage",
+    "synopsis": "Eddie Brock is still struggling to co-exist with the shape-shifting extraterrestrial Venom. When deranged serial killer Cletus Kasady also becomes host to an alien symbiote, Brock and Venom must put aside their differences to stop his reign of terror.",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-fi"
+    ],
+    "duration_mins": 97,
+    "certification": "13",
+    "release_date": "October 2021",
+    "rating_avg": 4.0,
+    "rating_count": 20,
+    "poster_url": "https://placehold.co/300x450?text=Venom",
+    "trailer_url": "https://example.com/trailers/venom-let-there-be-carnage.mp4",
+    "casts": [
+      "Tom Hardy",
+      "Woody Harrelson",
+      "Michelle Williams",
+      "Naomi Harris"
+    ],
+    "director": "Andy Serkis",
+    "writers": [
+      "Kelly Marcel (Screenplay by)",
+      "Tom Hardy (Story by)"
+    ],
+    "formats": [
+      "English",
+      "IMDb 3D"
+    ],
+    "sections": [
+      "new_release",
+      "popular"
+    ],
+    "is_active": true
+  },
+  {
+    "_id": "mov_no_time_to_die",
+    "title": "007: No Time To Die",
+    "synopsis": "James Bond has left active service. His peace is short-lived when Felix Leiter, an old friend from the CIA, turns up asking for help, leading Bond onto the trail of a mysterious villain armed with dangerous new technology.",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Thriller"
+    ],
+    "duration_mins": 163,
+    "certification": "13",
+    "release_date": "September 2021",
+    "rating_avg": 4.3,
+    "rating_count": 12,
+    "poster_url": "https://placehold.co/300x450?text=No+Time+To+Die",
+    "trailer_url": "https://example.com/trailers/no-time-to-die.mp4",
+    "casts": [
+      "Daniel Craig",
+      "Rami Malek",
+      "Léa Seydoux",
+      "Lashana Lynch"
+    ],
+    "director": "Cary Joji Fukunaga",
+    "writers": [
+      "Neal Purvis (Screenplay by)",
+      "Robert Wade (Screenplay by)"
+    ],
+    "formats": [
+      "English",
+      "IMDb 3D"
+    ],
+    "sections": [
+      "new_release"
+    ],
+    "is_active": true
+  },
+  {
+    "_id": "mov_shang_chi",
+    "title": "Shang-Chi: Legend of the ten rings",
+    "synopsis": "Shang-Chi must confront the past he thought he left behind when he is drawn into the web of the mysterious Ten Rings organisation.",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "duration_mins": 132,
+    "certification": "P13",
+    "release_date": "September 2021",
+    "rating_avg": 4.1,
+    "rating_count": 9,
+    "poster_url": "https://placehold.co/300x450?text=Shang-Chi",
+    "trailer_url": "https://example.com/trailers/shang-chi.mp4",
+    "casts": [
+      "Simu Liu",
+      "Awkwafina",
+      "Tony Leung",
+      "Michelle Yeoh"
+    ],
+    "director": "Destin Daniel Cretton",
+    "writers": [
+      "Dave Callaham (Screenplay by)"
+    ],
+    "formats": [
+      "English",
+      "IMDb 3D"
+    ],
+    "sections": [
+      "popular",
+      "recommended"
+    ],
+    "is_active": true
+  },
+  {
+    "_id": "mov_mat_kilau",
+    "title": "Mat Kilau: Kebangkitan Pahlawan",
+    "synopsis": "Pahang, 1892. As British colonial forces tighten their grip on the interior, a group of local warriors led by Mat Kilau rises to defend their land, their faith and their people against a far better armed enemy.",
+    "genres": [
+      "Action",
+      "Historical",
+      "Drama"
+    ],
+    "duration_mins": 128,
+    "certification": "13",
+    "release_date": "June 2022",
+    "rating_avg": 4.5,
+    "rating_count": 15,
+    "poster_url": "https://placehold.co/300x450?text=Mat+Kilau",
+    "trailer_url": "https://example.com/trailers/mat-kilau.mp4",
+    "casts": [
+      "Adi Putra",
+      "Yayan Ruhian",
+      "Beto Kusyairy",
+      "Fadlan Hazim"
+    ],
+    "director": "Syamsul Yusof",
+    "writers": [
+      "Syamsul Yusof (Screenplay by)"
+    ],
+    "formats": [
+      "Malay",
+      "English subtitles"
+    ],
+    "sections": [
+      "popular",
+      "recommended"
+    ],
+    "is_active": true
+  }
+]

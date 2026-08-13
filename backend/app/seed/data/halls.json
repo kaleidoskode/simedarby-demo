@@ -1,0 +1,76 @@
+[
+  {
+    "_id": "hall_gsc_mv_1",
+    "cinema_id": "cin_gsc_midvalley",
+    "name": "Hall 1",
+    "comment": "Layout taken from the assignment wireframe: rows A and H are inset to six seats numbered 2 to 7, rows B to G carry the full eight. 60 seats.",
+    "rows": [
+      { "row": "A", "seat_numbers": [2, 3, 4, 5, 6, 7] },
+      { "row": "B", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "C", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "D", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "E", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "F", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "G", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "H", "seat_numbers": [2, 3, 4, 5, 6, 7] }
+    ],
+    "total_seats": 60
+  },
+  {
+    "_id": "hall_gsc_mv_2",
+    "cinema_id": "cin_gsc_midvalley",
+    "name": "Hall 2",
+    "rows": [
+      { "row": "A", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "B", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "C", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "D", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "E", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "F", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] }
+    ],
+    "total_seats": 48
+  },
+  {
+    "_id": "hall_tgv_sp_1",
+    "cinema_id": "cin_tgv_sunway",
+    "name": "Hall 1",
+    "rows": [
+      { "row": "A", "seat_numbers": [2, 3, 4, 5, 6, 7] },
+      { "row": "B", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "C", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "D", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "E", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "F", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "G", "seat_numbers": [2, 3, 4, 5, 6, 7] }
+    ],
+    "total_seats": 54
+  },
+  {
+    "_id": "hall_tgv_sp_2",
+    "cinema_id": "cin_tgv_sunway",
+    "name": "Hall 2",
+    "rows": [
+      { "row": "A", "seat_numbers": [1, 2, 3, 4, 5, 6] },
+      { "row": "B", "seat_numbers": [1, 2, 3, 4, 5, 6] },
+      { "row": "C", "seat_numbers": [1, 2, 3, 4, 5, 6] },
+      { "row": "D", "seat_numbers": [1, 2, 3, 4, 5, 6] },
+      { "row": "E", "seat_numbers": [1, 2, 3, 4, 5, 6] },
+      { "row": "F", "seat_numbers": [1, 2, 3, 4, 5, 6] }
+    ],
+    "total_seats": 36
+  },
+  {
+    "_id": "hall_gsc_gp_1",
+    "cinema_id": "cin_gsc_gurney",
+    "name": "Hall 1",
+    "rows": [
+      { "row": "A", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "B", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "C", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "D", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "E", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] },
+      { "row": "F", "seat_numbers": [1, 2, 3, 4, 5, 6, 7, 8] }
+    ],
+    "total_seats": 48
+  }
+]

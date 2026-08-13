@@ -1,0 +1,5 @@
+[
+  { "_id": "loc_kuala_lumpur", "name": "Kuala Lumpur", "country": "Malaysia" },
+  { "_id": "loc_selangor", "name": "Selangor", "country": "Malaysia" },
+  { "_id": "loc_penang", "name": "Penang", "country": "Malaysia" }
+]

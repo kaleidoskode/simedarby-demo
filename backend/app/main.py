@@ -9,7 +9,7 @@ from app.databases.mongodb.dependencies import get_mongo_db1, mongo_service
 from app.databases.mongodb.indexes import ensure_indexes
 from app.databases.redis.dependencies import get_redis, redis_service
 from app.core.logging_config import configure_logging
-from app.routes import auth, fnb, movies, venues
+from app.routes import auth, fnb, movies, seats, venues
 from fastapi import FastAPI, Request, HTTPException
 import asyncio
 import logging
@@ -143,8 +143,9 @@ app.include_router(movies.router, prefix=f"{API_V1}/movies", tags=["movies"])
 # router is mounted at the API root rather than under a shared prefix.
 app.include_router(venues.router, prefix=API_V1)
 app.include_router(fnb.router, prefix=f"{API_V1}/fnb", tags=["food & beverage"])
+app.include_router(seats.router, prefix=f"{API_V1}/showtimes", tags=["seats"])
 
-# Still to land: seat plan and locking, realtime, bookings, payment.
+# Still to land: realtime transports, bookings, payment.
 
 if __name__ == "__main__":
     uvicorn.run(

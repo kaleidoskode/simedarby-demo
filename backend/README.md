@@ -74,6 +74,31 @@ literally.
 Note that the image copies the source at build time, so `docker compose up -d
 --build` is needed for code changes to reach the container.
 
+### Tests
+
+```bash
+docker compose exec api pytest -v
+```
+
+The suite runs against the live stack over HTTP, not in process. That is
+deliberate: gunicorn serves these requests from several worker processes, so a
+lock that held only within one event loop would fail here. Testing through the
+socket is what proves the guarantee survives horizontal scaling, which is the
+reason the lock lives in Redis rather than in memory.
+
+The headline test fires **50 simultaneous requests for one seat** and asserts
+exactly one `201` and forty-nine `409`. The others cover all-or-nothing
+selection, holder-only release, TTL expiry, heartbeat behaviour, retry
+idempotency and locking a sold seat.
+
+The suite was verified to actually fail when it should: with the conflict check
+removed from the Lua script, all 50 racers won the same seat and the test caught
+it.
+
+```
+tests/test_seat_lock_concurrency.py .......... 10 passed
+```
+
 ### Running without Docker
 
 ```bash
@@ -101,6 +126,10 @@ All responses use the `{success, message, data}` envelope. Full schemas at
 | GET | `/api/v1/cinemas` | – | Cinema dropdown (`location_id`, `q`) |
 | GET | `/api/v1/halls/{id}` | – | Physical seat layout |
 | GET | `/api/v1/showtimes` | – | Screenings (`movie_id`, `cinema_id`, `date`) |
+| GET | `/api/v1/showtimes/{id}/seats` | optional | Seating plan with live seat state |
+| POST | `/api/v1/showtimes/{id}/seats/lock` | bearer | Hold seats, all or nothing |
+| DELETE | `/api/v1/showtimes/{id}/seats/lock` | bearer | Release your own holds |
+| POST | `/api/v1/showtimes/{id}/seats/lock/heartbeat` | bearer | Extend a hold |
 | GET | `/api/v1/fnb` | – | Food and beverage (`category`) |
 
 The catalogue is public because the design opens onto the home screen with no
@@ -120,6 +149,49 @@ No session is stored. The token carries `sub`, `name`, `iss`, `aud`, `iat` and
 `exp`, and is verified on each request with the algorithm pinned to HS256 —
 accepting whatever the token declares is how `alg: none` and HS/RS confusion
 attacks work.
+
+### Seat locking
+
+The requirement in 1.0: as User 2 starts booking seat A3, User 1 sees A3 as
+locked and can no longer book it.
+
+A lock is one Redis key per seat, holding the owner's id with a TTL:
+
+```
+lock:{showtime_id}:{seat} -> "usr_8f2a7c1e"   PX 120000
+```
+
+Acquire, release and extend are **Lua scripts**. Redis runs a script to
+completion before any other command, which is where three properties come
+from at once:
+
+| Property | Why the script gives it |
+| --- | --- |
+| Nothing interleaves | Checking every seat then claiming them is one indivisible step, so two users racing cannot both see a seat free |
+| All or nothing | F4 and F5 are taken together or not at all, so nobody holds half a selection. Per-seat `SET NX` would need rollback, and a crash mid-rollback leaks a lock |
+| Holder only | The compare-and-delete is inside the script, so User 2 cannot free User 1's seat between the read and the write |
+
+The TTL is what makes an abandoned app harmless: close it on the seating plan
+and the seats free themselves. No sweeper job, no expiry table, nothing
+scheduled.
+
+A conflict returns **409** naming exactly which seats lost, so the client
+repaints those rather than reloading the plan:
+
+```json
+{ "success": false,
+  "message": "Someone is already holding: F5",
+  "details": { "conflicts": ["F5"], "reason": "locked" } }
+```
+
+`held_by_me` on each seat is what separates the design's three states: a locked
+seat is *Selected* when it is the caller's own hold and unavailable when it is
+someone else's.
+
+**Redis is not the final authority.** It stops two users reaching checkout for
+the same seat, but a lock can be lost to a restart or an eviction. The binding
+guarantee is the unique index on `(showtime_id, seat)` in MongoDB, applied when
+payment is confirmed.
 
 ### Times and dates
 

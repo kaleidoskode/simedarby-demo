@@ -1,6 +1,6 @@
 import logging
-
 import traceback
+from typing import Optional
 
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -12,13 +12,16 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _error_body(error: str, message: str, traceback_text: str) -> dict:
+def _error_body(error: str, message: str, traceback_text: str,
+                details: Optional[dict] = None) -> dict:
     """Build an error payload, attaching the traceback only off production.
 
     A stack trace names internal file paths and module structure, so it is
     logged everywhere but returned to the caller only outside production.
     """
     body = {"success": False, "error": error, "message": message}
+    if details:
+        body["details"] = details
     if settings.expose_error_debug:
         body["debug"] = traceback_text
     return body
@@ -28,9 +31,18 @@ def _error_body(error: str, message: str, traceback_text: str) -> dict:
 
 
 class CustomErrorException(Exception):
-    def __init__(self, message: str, status_code: int = 500):
+    """An error with an HTTP status and optional machine readable detail.
+
+    `details` carries structure the client needs to act on rather than just
+    display. A seat lock conflict, for example, returns which seats were taken,
+    so the app can repaint exactly those instead of reloading the whole plan.
+    """
+
+    def __init__(self, message: str, status_code: int = 500,
+                 details: Optional[dict] = None):
         self.message = message
         self.status_code = status_code
+        self.details = details
         super().__init__(self.message)
 
 
@@ -78,6 +90,7 @@ class ExceptionHandler(BaseHTTPMiddleware):
                     custom_exc.__class__.__name__,
                     custom_exc.message,
                     formatted_tb,
+                    getattr(custom_exc, "details", None),
                 ),
             )
 

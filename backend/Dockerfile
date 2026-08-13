@@ -14,9 +14,12 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Install dependencies first so this layer is cached across code changes
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies first so this layer is cached across code changes.
+# The test suite is installed too, so a reviewer can run it against the live
+# stack with a single command. A production build would install
+# requirements.txt alone.
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy the application source. Configuration is supplied at run time through
 # the compose env_file, so no .env or key material is baked into the image.

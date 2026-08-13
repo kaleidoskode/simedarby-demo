@@ -11,21 +11,21 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-from zoneinfo import ZoneInfo
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
 from app.databases.mongodb import collections
 from app.databases.mongodb.indexes import ensure_indexes
+from app.utilities.local_time import cinema_timezone, display_time
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent / "data"
 
-# The cinema's local timezone. Screenings are stored in UTC and rendered in
-# local time, so a client in another timezone still sees the correct listing.
-CINEMA_TZ = ZoneInfo("Asia/Kuala_Lumpur")
+# The cinema's local timezone, from configuration so the seeder and the API
+# can never disagree about which timezone a screening is in.
+CINEMA_TZ = cinema_timezone()
 
 # Daily schedule, exactly the times on the Ticket Booking screen.
 SCREENING_TIMES = ["09:20", "11:40", "13:20", "15:30", "17:40", "19:30", "21:20"]
@@ -73,10 +73,6 @@ def _load(name: str) -> List[Dict[str, Any]]:
     return records
 
 
-def _display_time(moment: datetime) -> str:
-    """Render a UTC instant as local time in the wireframe's format."""
-    local = moment.astimezone(CINEMA_TZ)
-    return local.strftime("%I:%M%p").lstrip("0")
 
 
 def build_showtimes(movies: List[Dict[str, Any]],
@@ -114,7 +110,7 @@ def build_showtimes(movies: List[Dict[str, Any]],
                     "hall_id": hall_id,
                     "starts_at": starts_at,
                     "ends_at": ends_at,
-                    "display_time": _display_time(starts_at),
+                    "display_time": display_time(starts_at),
                     "display_date": f"{date:%b %d, %Y}",
                     "price_minor": price_minor,
                     "currency": settings.currency,
@@ -133,8 +129,34 @@ def demo_showtime_id() -> str:
             f"_{DEMO_HALL.replace('hall_', '')}")
 
 
-def build_taken_seats(showtime_id: str,
-                      price_minor: int) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+def build_screening_snapshot(showtime: Dict[str, Any], movie: Dict[str, Any],
+                             hall: Dict[str, Any]) -> Dict[str, Any]:
+    """The screening details copied onto a booking.
+
+    Built the same way the booking service builds it, so a seeded booking is
+    indistinguishable in shape from one made through the API and validates
+    against the same model.
+    """
+    return {
+        "showtime_id": showtime["_id"],
+        "movie_title": movie["title"],
+        "genres": movie.get("genres", []),
+        "duration_mins": movie.get("duration_mins", 0),
+        "formats": movie.get("formats", []),
+        "poster_url": movie.get("poster_url"),
+        "cinema_name": showtime["cinema_name"],
+        "hall_name": hall["name"],
+        "display_date": showtime.get("display_date", ""),
+        "starts_at": showtime["starts_at"],
+        "ends_at": showtime["ends_at"],
+        "start_display": showtime.get("display_time", ""),
+        "end_display": display_time(showtime["ends_at"]),
+    }
+
+
+def build_taken_seats(showtime_id: str, price_minor: int,
+                      screening: Dict[str, Any]
+                      ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Create the confirmed booking that owns the crossed-out seats."""
     now = datetime.now(timezone.utc)
     booking_id = "bkg_seeded_taken"
@@ -146,6 +168,7 @@ def build_taken_seats(showtime_id: str,
         "reference": "CBK-SEED01",
         "user_id": "usr_seed_patron",
         "showtime_id": showtime_id,
+        "screening": screening,
         "seats": WIREFRAME_TAKEN_SEATS,
         "status": "confirmed",
         "ticket_class": "Classic",
@@ -211,11 +234,20 @@ async def seed(db: AsyncIOMotorDatabase, reset: bool = False) -> Dict[str, int]:
         review["created_at"] = now - timedelta(days=review.pop("days_ago"))
     documents[collections.REVIEWS] = reviews
 
-    documents[collections.SHOWTIMES] = build_showtimes(movies, cinemas)
+    showtimes = build_showtimes(movies, cinemas)
+    documents[collections.SHOWTIMES] = showtimes
 
+    # The pre-sold seats from the wireframe, owned by a confirmed booking so
+    # they arrive through the ordinary reservation path.
     showtime_id = demo_showtime_id()
+    demo_showtime = next(s for s in showtimes if s["_id"] == showtime_id)
+    demo_movie = next(m for m in movies if m["_id"] == DEMO_MOVIE)
+    demo_hall = next(h for h in documents[collections.HALLS]
+                     if h["_id"] == DEMO_HALL)
+
     booking, reservations = build_taken_seats(
-        showtime_id, DEMO_SEAT_PRICE_MINOR)
+        showtime_id, DEMO_SEAT_PRICE_MINOR,
+        build_screening_snapshot(demo_showtime, demo_movie, demo_hall))
     documents[collections.BOOKINGS] = [booking]
     documents[collections.SEAT_RESERVATIONS] = reservations
 

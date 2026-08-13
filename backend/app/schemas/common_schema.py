@@ -8,6 +8,26 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 
+def normalise_seats(seats: List[str]) -> List[str]:
+    """Upper-case, trim and de-duplicate seat labels, preserving order.
+
+    Shared by every request body that carries a seat list, so the seat "f4 "
+    means the same thing wherever it is sent.
+
+    De-duplication matters beyond tidiness: ["F4", "F4"] would otherwise pass
+    the same key to the lock script twice and count as two seats against the
+    per-booking limit.
+    """
+    seen: List[str] = []
+    for seat in seats:
+        cleaned = seat.strip().upper()
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    if not seen:
+        raise ValueError("At least one seat is required")
+    return seen
+
+
 class MovieSection(str, Enum):
     """Groupings shown on the home screen."""
 

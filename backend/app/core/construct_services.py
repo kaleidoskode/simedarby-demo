@@ -13,6 +13,7 @@ from app.databases.mongodb.dependencies import get_mongo_db1
 from app.databases.redis.dependencies import get_redis
 from app.services import (
     auth_services,
+    booking_services,
     catalog_services,
     event_services,
     lock_services,
@@ -53,3 +54,12 @@ async def seats(
 ) -> seat_services.SeatServices:
     """The seating plan, combining the layout, reservations and locks."""
     return seat_services.SeatServices(mongo_db1, lock, event)
+
+
+async def bookings(
+    mongo_db1: AsyncIOMotorDatabase = Depends(get_mongo_db1),
+    lock: lock_services.LockServices = Depends(locks),
+    event: event_services.EventServices = Depends(events),
+) -> booking_services.BookingServices:
+    """Drafts between choosing seats and paying for them."""
+    return booking_services.BookingServices(mongo_db1, lock, event)

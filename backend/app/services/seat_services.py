@@ -182,8 +182,8 @@ class SeatServices:
 
     # ------------------------------------------------------------ validation
 
-    async def _validate(self, showtime_id: str,
-                        seats: List[str]) -> Dict[str, Any]:
+    async def _validate(self, showtime_id: str, seats: List[str],
+                        holder: str) -> Dict[str, Any]:
         """Reject anything the lock script cannot judge for itself."""
         showtime = await self._showtime(showtime_id)
 
@@ -191,20 +191,34 @@ class SeatServices:
             raise CustomErrorException(
                 "This screening has already started", status_code=409)
 
-        if len(seats) > settings.max_seats_per_booking:
-            raise CustomErrorException(
-                f"A booking is limited to {settings.max_seats_per_booking} "
-                f"seats, {len(seats)} requested",
-                status_code=422)
-
         hall = await self._hall(showtime["hall_id"])
-        existing = {seat for _, _, seat in self._layout(hall)}
+        all_seats = [seat for _, _, seat in self._layout(hall)]
+        existing = set(all_seats)
+
         unknown = [seat for seat in seats if seat not in existing]
         if unknown:
             raise CustomErrorException(
                 f"No such seat in {hall['name']}: {', '.join(unknown)}",
                 status_code=422,
                 details={"unknown_seats": unknown})
+
+        # The limit is on what the caller ends up holding, not on one request.
+        # Counting per request would let a user take ten seats, then ten more,
+        # and book all twenty.
+        held = await self.locks.holders(showtime_id, all_seats)
+        already_mine = {seat for seat, owner in held.items()
+                        if owner == holder}
+        total_after = len(already_mine | set(seats))
+
+        if total_after > settings.max_seats_per_booking:
+            raise CustomErrorException(
+                f"A booking is limited to {settings.max_seats_per_booking} "
+                f"seats. You already hold {len(already_mine)} and asked for "
+                f"{len(seats)} more.",
+                status_code=422,
+                details={"limit": settings.max_seats_per_booking,
+                         "already_held": sorted(already_mine),
+                         "requested": seats})
 
         return showtime
 
@@ -213,7 +227,7 @@ class SeatServices:
     async def lock(self, showtime_id: str, seats: List[str],
                    holder: str) -> LockResult:
         """Hold seats for this caller, all of them or none."""
-        await self._validate(showtime_id, seats)
+        await self._validate(showtime_id, seats, holder)
 
         # A sold seat is checked here because the Redis script cannot see
         # MongoDB. This is a courtesy so the user is told immediately; the

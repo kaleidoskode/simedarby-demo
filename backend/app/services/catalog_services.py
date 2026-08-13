@@ -300,15 +300,6 @@ class CatalogServices:
             async for doc in cursor
         ]
 
-    async def get_showtime(self, showtime_id: str) -> Dict[str, Any]:
-        """Raw showtime document, used by the seat and booking services."""
-        doc = await self.db[collections.SHOWTIMES].find_one(
-            {"_id": showtime_id})
-        if not doc:
-            raise CustomErrorException(
-                f"Showtime '{showtime_id}' not found", status_code=404)
-        return doc
-
     # -------------------------------------------------------------------- F&B
 
     async def list_fnb(self, category: Optional[str]) -> List[FnbItem]:

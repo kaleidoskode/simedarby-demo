@@ -5,7 +5,7 @@ from typing import List
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.schemas.common_schema import Money, SeatStatus
+from app.schemas.common_schema import Money, SeatStatus, normalise_seats
 
 
 class SeatState(BaseModel):
@@ -60,23 +60,7 @@ class SeatSelection(BaseModel):
 
     seats: List[str] = Field(..., min_length=1, examples=[["F4", "F5"]])
 
-    @field_validator("seats")
-    @classmethod
-    def normalise(cls, seats: List[str]) -> List[str]:
-        """Upper-case, trim and de-duplicate while preserving order.
-
-        De-duplication matters: ["F4", "F4"] would otherwise pass the same key
-        to the lock script twice and inflate the seat count against the
-        per-booking limit.
-        """
-        seen = []
-        for seat in seats:
-            cleaned = seat.strip().upper()
-            if cleaned and cleaned not in seen:
-                seen.append(cleaned)
-        if not seen:
-            raise ValueError("At least one seat is required")
-        return seen
+    _normalise = field_validator("seats")(normalise_seats)
 
 
 class LockResult(BaseModel):

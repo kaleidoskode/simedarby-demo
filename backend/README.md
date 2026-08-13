@@ -100,10 +100,15 @@ Both suites were verified to actually fail when they should:
 * disabling the fan-out made the five push-dependent real-time tests time out,
   while the six that do not need push still passed
 
+The booking tests check the arithmetic against the design: two seats and a
+discounted combo come to **RM104.50**, the total printed on the Booking Summary
+screen.
+
 ```
+tests/test_booking_flow.py ................
 tests/test_realtime.py ...........
 tests/test_seat_lock_concurrency.py ..........
-21 passed
+37 passed
 ```
 
 ### Running without Docker
@@ -140,6 +145,11 @@ All responses use the `{success, message, data}` envelope. Full schemas at
 | DELETE | `/api/v1/showtimes/{id}/seats/lock` | bearer | Release your own holds |
 | POST | `/api/v1/showtimes/{id}/seats/lock/heartbeat` | bearer | Extend a hold |
 | GET | `/api/v1/fnb` | – | Food and beverage (`category`) |
+| POST | `/api/v1/bookings` | bearer | Start a booking from held seats |
+| GET | `/api/v1/bookings` | bearer | List your bookings |
+| GET | `/api/v1/bookings/{id}` | bearer | Booking summary |
+| PUT | `/api/v1/bookings/{id}/fnb` | bearer | Set the food and drink order |
+| DELETE | `/api/v1/bookings/{id}` | bearer | Cancel and release the seats |
 
 The catalogue is public because the design opens onto the home screen with no
 login. A token is required from seat locking onward, where a request owns
@@ -201,6 +211,40 @@ someone else's.
 the same seat, but a lock can be lost to a restart or an eviction. The binding
 guarantee is the unique index on `(showtime_id, seat)` in MongoDB, applied when
 payment is confirmed.
+
+### Bookings
+
+A lock and a booking are separate on purpose, and each does one job:
+
+```
+lock      ephemeral   Redis     "I am choosing this seat"
+booking   durable     MongoDB   "this is what I intend to buy"
+```
+
+A booking can only be created for seats the caller **already holds**, so a
+client cannot skip the seating plan and book seats it never locked. Creating
+one extends those holds from the short seat-picking TTL to the longer checkout
+window, and sets the booking's `expires_at` to match, so the two never disagree
+about when the hold ends.
+
+Expiry is resolved when a booking is read, not by a scheduled job. The seats are
+already free by then, released by the Redis TTL; this only brings the booking's
+status into line, which keeps the service stateless with nothing running in the
+background.
+
+`PUT /bookings/{id}/fnb` replaces the whole order rather than appending, which
+matches a screen where quantities are adjusted then confirmed and makes the call
+idempotent — sending it twice cannot double the order. A quantity of zero
+removes an item and an empty list clears it, which is what Skip does. **Prices
+come from the catalogue, never from the request**, so a client cannot choose
+what it pays.
+
+Cancelling releases the holds immediately and broadcasts the change, so everyone
+watching the plan sees the seats reappear instead of waiting out the TTL.
+
+Screening details are copied onto the booking rather than joined at read time,
+so the summary and the ticket render from one document and still read correctly
+long after the catalogue has moved on.
 
 ### Real-time updates
 

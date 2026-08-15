@@ -124,7 +124,7 @@ supplied base template with the reason for each.
 ## Verifying the claims
 
 ```bash
-docker compose exec api pytest -v          # 57 tests
+docker compose exec api pytest -v          # 59 tests
 ```
 
 The suite runs against the **live stack over HTTP**, not in process, because

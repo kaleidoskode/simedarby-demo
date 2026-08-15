@@ -88,6 +88,12 @@ async def get_seat_changes(
 
     The response's `version` is the value to send as the next `since`. When
     nothing changed, it is echoed back unchanged and `changes` is empty.
+
+    Returns **410** when `since` is older than the retained log, which is
+    bounded. The surviving entries are deliberately *not* returned in that
+    case: they would look like a successful catch-up while silently omitting
+    whatever was trimmed. Refetch the plan from `GET /showtimes/{id}/seats`
+    instead, and resume from the `version` it carries.
     """
     data = await service.get_changes(showtime_id, since=since,
                                      viewer_id=user.id if user else "")

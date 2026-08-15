@@ -59,6 +59,9 @@ async def seating_plan_socket(
     drops, reconnect and pass that value to
     `GET /showtimes/{id}/seats/changes?since=` to collect what was missed; the
     WebSocket and that endpoint read the same log, so they cannot disagree.
+    That endpoint answers **410** if the client was away long enough for its
+    position to fall off the bounded log, meaning the gap cannot be filled and
+    the plan should be refetched instead.
     """
     viewer_id = ""
     if token:

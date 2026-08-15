@@ -31,7 +31,7 @@ Swagger is then at **http://localhost:8000/docs**.
 | Polling / WebSocket / HTTP2 comparison | [Transport comparison](#transport-comparison) | WebSocket chosen, polling shipped alongside as a fallback reading the same log, HTTP/2 push rejected with reasons |
 | API documentation, e.g. Swagger UI | `/docs` | Auto-generated OpenAPI, 64 schemas, every endpoint with request and response models |
 
-Beyond the brief: a **57-test suite** run against the live stack, three of whose
+Beyond the brief: a **59-test suite** run against the live stack, three of whose
 guarantees were confirmed by deliberately breaking the code to check the tests
 notice. See [Tests](#tests).
 
@@ -160,9 +160,9 @@ attempt itself inserted.
 ```
 tests/test_booking_flow.py .......................
 tests/test_payment_flow.py .................
-tests/test_realtime.py ...........
+tests/test_realtime.py .............
 tests/test_seat_lock_concurrency.py ..........
-57 passed
+59 passed
 ```
 
 ### Running without Docker
@@ -420,6 +420,16 @@ dropped socket, pass the last one seen to
 `GET /showtimes/{id}/seats/changes?since=` and collect exactly what was missed
 instead of re-fetching the whole plan. The `since` bound is exclusive, so
 polling twice never replays a change already applied.
+
+**When the gap is too old to fill.** The log is trimmed at 1,000 entries per
+screening, so a client away long enough loses its place in it. Returning
+whichever entries happen to have survived would be worse than failing: the
+client would believe it had caught up while quietly missing everything that was
+trimmed, and the seats on screen would be wrong with nothing to say so. That
+case answers **410** with the oldest version still held, and the client refetches
+the plan. Sitting exactly on the oldest surviving entry is still served — the
+entries after it are by definition intact — so the check costs nothing in the
+normal case.
 
 ### Transport comparison
 

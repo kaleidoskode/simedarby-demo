@@ -211,6 +211,75 @@ async def test_polling_catches_up_everything_missed(
     assert all(c["status"] == "locked" for c in changes)
 
 
+async def test_polling_refuses_a_catch_up_the_log_no_longer_covers(
+        api, token, auth_header, showtime_id, free_seats, redis):
+    """A position that fell off the log must not be answered with a partial set.
+
+    The stream is trimmed to a bounded length, so a client away long enough
+    loses its place in it. Serving the entries that happen to survive would
+    leave that client quietly missing whatever was trimmed — wrong seats on
+    screen, with nothing to indicate it. It is told to refetch the plan instead.
+    """
+    user = await token("user-1")
+
+    plan = await api.get(f"/showtimes/{showtime_id}/seats")
+    stale_version = plan.json()["data"]["version"]
+
+    # Three changes the client would need in order to catch up.
+    for seat in free_seats[:3]:
+        await api.post(f"/showtimes/{showtime_id}/seats/lock",
+                       json={"seats": [seat]}, headers=auth_header(user))
+
+    # Drop everything but the newest, exactly as MAXLEN trimming does once the
+    # log outgrows its bound. The client's position is now off the end.
+    await redis.xtrim(f"stream:showtime:{showtime_id}", maxlen=1,
+                      approximate=False)
+
+    response = await api.get(f"/showtimes/{showtime_id}/seats/changes",
+                             params={"since": stale_version})
+
+    assert response.status_code == 410
+    assert response.json()["details"]["reason"] == "history_unavailable"
+
+
+async def test_polling_still_catches_up_from_the_oldest_surviving_entry(
+        api, token, auth_header, showtime_id, free_seats, redis):
+    """Trimming up to the client's own position leaves the catch-up complete.
+
+    The boundary the check above must not overshoot: if the entry a client
+    last saw is the oldest one left, everything after it survived, so there is
+    nothing missing and the request is served normally.
+    """
+    user = await token("user-1")
+
+    plan = await api.get(f"/showtimes/{showtime_id}/seats")
+    version = plan.json()["data"]["version"]
+
+    seats = free_seats[:4]
+    for seat in seats[:2]:
+        await api.post(f"/showtimes/{showtime_id}/seats/lock",
+                       json={"seats": [seat]}, headers=auth_header(user))
+
+    # The client is up to date here, at the second of the four entries.
+    caught_up = await api.get(f"/showtimes/{showtime_id}/seats/changes",
+                              params={"since": version})
+    position = caught_up.json()["data"]["version"]
+
+    for seat in seats[2:]:
+        await api.post(f"/showtimes/{showtime_id}/seats/lock",
+                       json={"seats": [seat]}, headers=auth_header(user))
+
+    # Keep three entries, so the oldest surviving one is the client's position.
+    await redis.xtrim(f"stream:showtime:{showtime_id}", maxlen=3,
+                      approximate=False)
+
+    response = await api.get(f"/showtimes/{showtime_id}/seats/changes",
+                             params={"since": position})
+
+    assert response.status_code == 200
+    assert [c["seat"] for c in response.json()["data"]["changes"]] == seats[2:]
+
+
 async def test_a_bad_version_is_rejected(api, showtime_id):
     """A malformed version is a client error, not a server crash."""
     response = await api.get(f"/showtimes/{showtime_id}/seats/changes",

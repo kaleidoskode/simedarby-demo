@@ -31,7 +31,7 @@ from app.schemas.seat_schema import (
     SeatPlanSummary,
     SeatState,
 )
-from app.services.event_services import EventServices
+from app.services.event_services import EventServices, HistoryUnavailable
 from app.services.lock_services import LockServices
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,17 @@ class SeatServices:
 
         try:
             entries = await self.events.read_since(showtime_id, since)
+        except HistoryUnavailable as exc:
+            # 410 rather than 404: the position was valid and its history is
+            # gone. The client cannot be caught up, so it is told to start
+            # again from a full plan instead of trusting a partial answer.
+            raise CustomErrorException(
+                "That position is older than the retained change log. "
+                "Refetch the seating plan.",
+                status_code=410,
+                details={"reason": "history_unavailable",
+                         "oldest_version": exc.oldest},
+            ) from exc
         except ValueError as exc:
             raise CustomErrorException(str(exc), status_code=422) from exc
 

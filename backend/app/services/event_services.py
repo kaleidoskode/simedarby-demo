@@ -9,15 +9,45 @@ those three can never disagree about what happened.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from redis.asyncio import Redis
+from redis.exceptions import ResponseError
 
 logger = logging.getLogger(__name__)
 
 # Entries older than this are trimmed. A seating plan is only open for minutes,
 # so this is far more history than any client needs to catch up.
 STREAM_MAXLEN = 1000
+
+
+class HistoryUnavailable(Exception):
+    """The position asked for is older than the entries still retained.
+
+    Raised rather than returning what happens to have survived: a partial
+    answer would leave the client believing it had caught up while quietly
+    missing every change that was trimmed.
+    """
+
+    def __init__(self, since: str, oldest: str):
+        self.since = since
+        self.oldest = oldest
+        super().__init__(
+            f"Version '{since}' is older than the retained log, "
+            f"which starts at '{oldest}'")
+
+
+def _position(entry_id: str) -> Optional[Tuple[int, int]]:
+    """Parse a stream id into a comparable `(ms, seq)` pair.
+
+    Returns None when it is not one, leaving Redis to reject the id so that a
+    malformed version keeps producing the same error it always did.
+    """
+    milliseconds, _, sequence = entry_id.partition("-")
+    try:
+        return int(milliseconds), int(sequence or 0)
+    except ValueError:
+        return None
 
 
 class EventServices:
@@ -76,6 +106,44 @@ class EventServices:
             self.stream_key(showtime_id), count=1)
         return entries[0][0] if entries else "0-0"
 
+    async def covers(self, showtime_id: str, since: str) -> bool:
+        """Whether every entry after `since` is still in the stream.
+
+        Trimming only ever removes from the head, so the log still covers a
+        position in two cases: nothing has been trimmed at all, or the position
+        is at or after the oldest entry that survived. Sitting exactly on that
+        oldest entry is covered — everything after it is by definition intact.
+        """
+        try:
+            info = await self.redis.xinfo_stream(self.stream_key(showtime_id))
+        except ResponseError:
+            # No stream yet, so nothing has happened and nothing is missing.
+            return True
+
+        # `entries-added` counts every append ever made. While it matches the
+        # current length nothing has been trimmed, so any position is covered.
+        # This is what stops a client sitting at "0-0" being sent to refetch on
+        # the first change to a quiet screening.
+        if info.get("entries-added") == info["length"]:
+            return True
+
+        oldest = info.get("recorded-first-entry-id")
+        if oldest is None:
+            entry = info.get("first-entry")
+            oldest = entry[0] if entry else None
+        if not oldest or oldest == "0-0":
+            # Trimmed empty: there is no surviving entry to resume from.
+            return False
+
+        if since in ("", "0-0"):
+            # Asking from the beginning of the log, and the beginning is gone.
+            return False
+
+        position, first = _position(since), _position(oldest)
+        if position is None or first is None:
+            return True
+        return position >= first
+
     async def read_since(self, showtime_id: str, since: str,
                          limit: int = 500) -> List[Dict[str, Any]]:
         """Replay entries recorded after `since`.
@@ -83,7 +151,16 @@ class EventServices:
         This is what a stream buys over pub/sub. A subscriber that dropped its
         connection, or a client polling on an interval, can ask for exactly
         what it missed instead of re-fetching the entire seating plan.
+
+        Raises `HistoryUnavailable` when the position has been trimmed away,
+        because the alternative — returning the surviving tail — is a silent
+        gap in the client's seat state rather than a visible failure.
         """
+        if not await self.covers(showtime_id, since):
+            info = await self.redis.xinfo_stream(self.stream_key(showtime_id))
+            raise HistoryUnavailable(
+                since, info.get("recorded-first-entry-id") or "0-0")
+
         # The bracket makes the range exclusive, so the caller does not receive
         # the entry it already has.
         start = f"({since}" if since and since != "0-0" else "-"

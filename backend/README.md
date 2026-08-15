@@ -145,8 +145,13 @@ code they cover:
 * removing the conflict check from the Lua script let all 50 racers win the
   same seat, and the concurrency test caught it
 * disabling the fan-out made the five push-dependent real-time tests time out,
-  while the six that do not need push still passed
+  while the eight that do not need push still passed
 * removing the idempotency guard made the payment retry test fail
+* bypassing the catch-up coverage check restored the silent gap it was added to
+  close, and the `410` test caught it
+* making that same check always reject failed five tests, including the one
+  asserting a client sitting on the oldest surviving entry is still served —
+  so the check cannot quietly become over-eager either
 
 One mutation was more informative for passing. Removing the atomic claim from
 the payment path did **not** break anything: twelve concurrent payments still

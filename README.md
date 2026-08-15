@@ -7,8 +7,8 @@ and showing that change to everyone else in real time. That is what this is
 built around, and what the material below is arranged to let you verify.
 
 ```
-backend/     the submission      FastAPI · MongoDB · Redis · Docker
-frontend/    a proof of concept  Next.js · React · TypeScript
+backend/     the submission       FastAPI · MongoDB · Redis · Docker
+frontend/    not submitted work   Next.js — a demo harness, explained below
 ```
 
 ---
@@ -134,26 +134,57 @@ event loop would pass a unit test and fail in production.
 The headline test fires **50 simultaneous requests for one seat** and asserts
 exactly one `201` and forty-nine `409`.
 
-Three guarantees were confirmed by deliberately breaking the code to check the
+Five guarantees were confirmed by deliberately breaking the code to check the
 tests notice: removing the conflict check from the Lua script let all 50 racers
-win, disabling the WebSocket fan-out timed out the push tests, and removing the
-idempotency guard broke the payment retry test. A fourth mutation *passed*,
-which turned out to be more useful — it exposed a rollback bug one layer down.
-That story is in [backend/README.md](backend/README.md#tests).
+win, disabling the WebSocket fan-out timed out the push tests, removing the
+idempotency guard broke the payment retry test, and the two halves of the
+reconnect catch-up guard — bypassing it, then making it always reject — each
+failed the tests written for them.
+
+A sixth mutation *passed*, which turned out to be more useful: it exposed a
+rollback bug one layer down. That story is in
+[backend/README.md](backend/README.md#tests).
 
 ---
 
 ## Seeing the seat locking: `frontend/`
 
-**This is a proof of concept for the backend, not a submission.** Section 4.1
-asks for a **mobile** app in React Native or Flutter; this is a web app,
-deliberately, so it cannot be mistaken for an answer to that track. The
-deliverable is the API.
+> **This is not part of the submission, and is not offered for assessment.**
+>
+> The deliverable for 4.3 is the API in [`backend/`](backend). This directory
+> holds a small client written for one purpose — to *demonstrate* that API — and
+> it is built in **Next.js**, which the assignment does not ask for anywhere.
+> Section 4.1's mobile track calls for **React Native or Flutter**; this is a web
+> app in neither. That mismatch is deliberate: it means this cannot be mistaken
+> for an attempt at 4.1, and there is no ambiguity about which work is being
+> submitted. Please judge the backend.
 
-It exists because of one gap. Swagger can demonstrate every endpoint here
-except the behaviour the assignment is actually built around: a seat locking
-the instant another user takes it. A JSON response cannot show that. Two
-browser windows can, in about three seconds.
+### What Swagger cannot show
+
+Swagger is the right way to see what this API offers, and the whole booking
+journey can be driven from it. But the requirement the service is actually built
+around is not about a single caller:
+
+> As User 2 starts booking seat A3, User 1 sees A3 as locked and can no longer
+> book it.
+
+Four things in that sentence are invisible on an OpenAPI page:
+
+- **There is only ever one caller.** Swagger has no second user, and the
+  requirement is entirely about what User 1 sees when User 2 acts.
+- **A `201` proves your own request succeeded, not that anyone else was told.**
+  The interesting half of seat locking is the notification, and it leaves by a
+  different door than the response you can see.
+- **The WebSocket cannot appear there at all.** OpenAPI has no vocabulary for
+  WebSocket endpoints, so the primary real-time transport is absent from the
+  generated page; only the polling fallback shows up.
+- **"Real time" is a claim about latency**, and a JSON body has no time axis.
+  You cannot read three seconds off a response payload.
+
+Two browser windows settle all four at once, and it takes about three seconds to
+watch.
+
+### Running it
 
 Built with **Next.js 16** (App Router), **React 19**, **TypeScript** and
 **Tailwind CSS 4**. It holds no state of its own: every screen reads from the
@@ -167,30 +198,12 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-Then, to see the scenario described in 1.0:
+Open it in **two browser windows**, pick the same screening in both, and lock a
+seat in one — the other greys it out with no refresh and no polling.
 
-1. Open **http://localhost:3000** in **two browser windows**, side by side.
-2. Each window is a different guest — identity is per browser tab, and the strip
-   at the top shows who each one is.
-3. In both: **Venom: Let There Be Carnage → Book Ticket →** the date the seeder
-   printed **→ 5:40PM**.
-4. Click a seat in the left window.
-
-The right window greys that seat immediately, labelled *being chosen*, and
-cannot select it. The left shows the same seat blue, as *Selected*. Same seat,
-same server state, rendered differently per viewer — which is the three-state
-legend in the design.
-
-Nothing is polled: the green *live* dot is a WebSocket, and the network panel
-stays quiet while seats change.
-
-The client walks the rest of the flowchart too — search, movie detail, seats,
-food, summary, payment, ticket — so the API can be seen working end to end.
-Two seats and a Fresh XL Combo come to **RM104.50**, the total printed on the
-Booking Summary in the wireframe.
-
-[frontend/README.md](frontend/README.md) has the details, including how to
-demonstrate reconnection catch-up by restarting the API mid-session.
+**[frontend/README.md](frontend/README.md)** has the click-by-click for that,
+the walk through the rest of the flowchart, and how to demonstrate reconnection
+catch-up by restarting the API mid-session.
 
 ---
 

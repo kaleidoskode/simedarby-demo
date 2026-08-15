@@ -6,9 +6,11 @@ whole booking journey.
 ## This is not a submission for 4.1
 
 Section 4.1 asks for a **mobile** app in React Native or Flutter. This is a web
-app, deliberately, so it cannot be mistaken for an answer to that track. The
-assessment being answered is **4.3, Back End Developer**, and the deliverable is
-the API in [`../backend`](../backend).
+app built with **Next.js** — a technology the assignment does not name for
+either track. That is deliberate: it cannot be mistaken for an attempt at 4.1,
+and there is no ambiguity about which work is being submitted. The assessment
+being answered is **4.3, Back End Developer**, and the deliverable is the API in
+[`../backend`](../backend). Nothing in this directory is offered for assessment.
 
 This exists because one thing in that API cannot be shown through Swagger: a
 seat locking the instant another user takes it. Open the seating plan in two

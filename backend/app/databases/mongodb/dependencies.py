@@ -1,9 +1,6 @@
 import os
-from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.databases.mongodb.db import MongoService
-
-load_dotenv()
 
 # Instantiate the MongoService
 mongo_service = MongoService()

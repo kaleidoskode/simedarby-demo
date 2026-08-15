@@ -24,7 +24,6 @@ The API must be up first.
 
 ```bash
 cd ../backend
-cp .env.example .env
 docker compose up -d
 docker compose exec api python -m app.seed --reset
 ```
@@ -42,10 +41,13 @@ as the assessed deliverable and a reviewer who only wants the API never has to
 touch this.
 
 `NEXT_PUBLIC_API_BASE` points at the API and defaults to
-`http://localhost:8000`. Set it if the backend is published on another port:
+`http://localhost:8000`, which is where the backend listens whichever way it was
+started — under compose or directly on the host — so there is normally nothing
+to set. Override it only to reach an API somewhere else entirely, such as on
+another machine:
 
 ```bash
-NEXT_PUBLIC_API_BASE=http://localhost:9000 npm run dev
+NEXT_PUBLIC_API_BASE=http://192.168.1.20:8000 npm run dev
 ```
 
 ## Showing the real-time locking

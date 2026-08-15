@@ -1,13 +1,12 @@
-from app.utilities.db_credential_check import credential_check
-from app.utilities.prefered_environment import environment
-from dotenv import load_dotenv
+from app.core.environment import ENVIRONMENT, describe_source
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Dict
 from urllib.parse import quote_plus
 
-# Load environment variables from .env file
-load_dotenv()
+# Importing app.core.environment has already loaded `.env` and the
+# `.env.<environment>` file it names into the process environment, so
+# everything below reads from there. Nothing else needs to call load_dotenv.
 
 
 # Connection schemes accepted for MongoDB.
@@ -21,6 +20,20 @@ _MONGO_DEFAULT_OPTIONS = {
     "mongodb+srv": "retryWrites=true&w=majority",
     "mongodb": "authSource=admin",
 }
+
+
+def _required(name: str) -> str:
+    """Read a setting that the service cannot start without.
+
+    The error names the variable *and* where it was looked for, because the
+    two ways to get this wrong — pointing `ENVIRONMENT` at a file that does not
+    exist, and a file that exists but is missing a line — need different fixes
+    and are otherwise indistinguishable from a stack trace.
+    """
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"{name} is not set. {describe_source()}")
+    return value
 
 
 class Settings(BaseSettings):
@@ -64,18 +77,25 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
-    # Pydantic configuration: read from .env, ignore extra environment variables
-    model_config = SettingsConfigDict(
-        env_file=".env", extra="ignore", env_prefix="APP_")
+    # Read from the process environment, which `app.core.environment` has
+    # already populated from the right file. No `env_file` here on purpose: it
+    # would be resolved relative to the working directory rather than to the
+    # backend root, so the same code would behave differently depending on
+    # where it was launched from.
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="APP_")
 
     @property
-    def system_env(self) -> str:
-        """The deployment environment: local, development or production."""
-        return os.getenv("SYSTEM_ENV", "development")
+    def environment(self) -> str:
+        """The deployment environment: local, development or production.
+
+        Set by `ENVIRONMENT` in `.env`, which also decides which
+        `.env.<environment>` file the settings above were read from.
+        """
+        return ENVIRONMENT
 
     @property
     def is_production(self) -> bool:
-        return self.system_env == "production"
+        return self.environment == "production"
 
     @property
     def expose_error_debug(self) -> bool:
@@ -109,54 +129,43 @@ class Settings(BaseSettings):
 
     @property
     def mongo_config(self) -> Dict[str, str]:
-        """Constructs the MongoDB URI and returns it along with the database name."""
-        try:
-            # Fetch credentials for different MongoDB databases
-            mongo_credentials_1 = environment(self.system_env, 'mongo1')
+        """Constructs the MongoDB URI and returns it along with the database name.
 
-            # Validate Mongo credentials using the external `credential_check` function
-            credential_check([mongo_credentials_1])
+        The variables carry no environment suffix — `MONGO1_HOST` is the host
+        for whichever environment `.env` selected, because the file it was read
+        from is what distinguishes them.
+        """
+        credentials = {
+            'username': _required("MONGO1_USER"),
+            'password': _required("MONGO1_PASSWORD"),
+            'host': _required("MONGO1_HOST"),
+            'db': _required("MONGO1_DB"),
+        }
 
-            # Simplified return with just the database name and its URL
-            return {
-                mongo_credentials_1['db']: self._build_mongo_uri(mongo_credentials_1)
-            }
-        except KeyError as e:
-            raise ValueError(
-                f"Missing required MongoDB configuration key: {e}")
-        except Exception as e:
-            raise ValueError(f"Error constructing MongoDB URI: {e}")
+        return {credentials['db']: self._build_mongo_uri(credentials)}
 
     @property
     def redis_config(self) -> Dict[str, str]:
-        """Constructs the Redis URI used for seat locks and the event stream."""
-        try:
-            redis_credentials_1 = environment(self.system_env, 'redis1')
+        """Constructs the Redis URI used for seat locks and the event stream.
 
-            # Redis commonly runs without authentication in local development,
-            # so only the host is mandatory here.
-            if not redis_credentials_1.get('host'):
-                raise ValueError("Redis host is not set.")
+        Authentication is optional — Redis commonly runs without it on a
+        private network — so only the host is required.
+        """
+        host = _required("REDIS1_HOST")
 
-            username = redis_credentials_1.get('username') or ''
-            password = redis_credentials_1.get('password') or ''
-            if password:
-                auth = f"{quote_plus(username)}:{quote_plus(password)}@"
-            elif username:
-                auth = f"{quote_plus(username)}@"
-            else:
-                auth = ""
+        username = os.getenv("REDIS1_USER") or ''
+        password = os.getenv("REDIS1_PASSWORD") or ''
+        if password:
+            auth = f"{quote_plus(username)}:{quote_plus(password)}@"
+        elif username:
+            auth = f"{quote_plus(username)}@"
+        else:
+            auth = ""
 
-            db_index = redis_credentials_1.get('db') or '0'
-            scheme = os.getenv("REDIS1_SCHEME", "redis").strip()
+        db_index = os.getenv("REDIS1_DB") or '0'
+        scheme = os.getenv("REDIS1_SCHEME", "redis").strip()
 
-            return {
-                'url': f"{scheme}://{auth}{redis_credentials_1['host']}/{db_index}"
-            }
-        except KeyError as e:
-            raise ValueError(f"Missing required Redis configuration key: {e}")
-        except Exception as e:
-            raise ValueError(f"Error constructing Redis URI: {e}")
+        return {'url': f"{scheme}://{auth}{host}/{db_index}"}
 
 
 # Create the settings instance, ensuring .env values and defaults are loaded

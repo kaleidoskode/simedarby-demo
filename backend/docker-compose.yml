@@ -11,8 +11,17 @@ services:
         PORT: ${PORT:-8000}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
+    # Always the local stack: the MongoDB and Redis this file starts are the
+    # ones it points at, so `.env.local` is named directly rather than followed
+    # from ENVIRONMENT. Switching `.env` to development or production is for
+    # running the service *outside* compose, against a real datastore.
+    #
+    # `.env` is still listed so ENVIRONMENT reaches the container explicitly,
+    # rather than the application falling back to its default and appearing to
+    # be configured when it is not.
     env_file:
       - .env
+      - .env.local
     depends_on:
       mongo:
         condition: service_healthy
@@ -34,9 +43,14 @@ services:
 
   mongo:
     image: mongo:7
+    # Every `${...}` in this file is interpolated from `.env` or the shell —
+    # never from `.env.local`, which compose only forwards to containers. So
+    # these fall through to the defaults below, which are exactly the values
+    # MONGO1_USER / MONGO1_PASSWORD carry in `.env.local`. Change one, change
+    # both, or set them in the environment where compose can see them.
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO1_USER_LOCAL:-cinema}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO1_PASSWORD_LOCAL:-cinema_secret}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO1_USER:-cinema}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO1_PASSWORD:-cinema_secret}
     ports:
       - "${MONGO_PORT:-27017}:27017"
     volumes:

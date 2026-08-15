@@ -1,9 +1,11 @@
 import json
 import multiprocessing
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Importing this loads `.env` and the `.env.<environment>` file it names, so
+# the worker settings below are read from the same place the application reads
+# its own. Imported for that effect, not for a name.
+import app.core.environment  # noqa: F401
 
 workers_per_core_str = os.getenv("WORKERS_PER_CORE", "1")
 max_workers_str = os.getenv("MAX_WORKERS", "10")

@@ -8,5 +8,8 @@ __pycache__
 .pytest_cache
 logs
 note.txt
+# No environment file is baked into the image. Compose injects the settings for
+# the local stack; a direct `docker run` gets them from `-e` or `--env-file`.
 .env
+.env.*
 .data

@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from app.middleware.exception import ExceptionHandler
 from app.middleware import process_time_log
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,8 +26,6 @@ import uvicorn
 from typing import Any, Callable, TypeVar
 import os
 
-
-load_dotenv()
 
 # Configured before anything else so startup and connection messages are not
 # emitted into an unconfigured root logger and lost.

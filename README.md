@@ -22,24 +22,24 @@ frontend/    not submitted work   Next.js — a demo harness, explained below
 git clone https://github.com/kaleidoskode/simedarby-demo.git
 cd simedarby-demo/backend
 
-cp .env.example .env                              # 1. configuration
-docker compose up -d --build                      # 2. API, MongoDB, Redis
-docker compose exec api python -m app.seed --reset # 3. demo data
+docker compose up -d --build                       # 1. API, MongoDB, Redis
+docker compose exec api python -m app.seed --reset # 2. demo data
 ```
 
-**1 — configuration.** `.env` is not committed, so it is copied from the
-template. The defaults in `.env.example` work with the compose file as shipped;
-nothing needs editing. The API refuses to start without it rather than booting
-with placeholder credentials, so a missing file says so plainly.
+There is no configuration step. `backend/.env` and `backend/.env.local` are
+committed because they hold nothing secret — the credentials in them address
+containers on a private compose network and are useless outside it — so a fresh
+clone runs as it stands. [Configuration](backend/README.md#configuration)
+explains the one-word environment switch and where real credentials go.
 
-**2 — the stack.** Three containers: the API on port 8000, MongoDB and Redis.
+**1 — the stack.** Three containers: the API on port 8000, MongoDB and Redis.
 The first build takes a couple of minutes; afterwards it is seconds. The command
 returns once MongoDB and Redis report healthy and the API has started; the API
-itself begins answering a few seconds later. Step 3 can follow immediately
+itself begins answering a few seconds later. Step 2 can follow immediately
 regardless, because the seeder talks to MongoDB directly rather than through the
 API. `docker compose logs -f api` follows the logs.
 
-**3 — demo data.**
+**2 — demo data.**
 
 The API starts with an empty database, so this fills it with
 the dataset from the assignment's wireframes: *Venom: Let There Be Carnage* and
@@ -95,7 +95,8 @@ That is the whole setup. Nothing else to install, no credentials to obtain.
 is generated from the code, so it cannot drift from the implementation.
 
 Every endpoint carries a request model, a response model and a description of
-*why* it behaves as it does — 23 operations and 64 schemas. It is interactive:
+*why* it behaves as it does — the 23 booking-flow operations plus the health
+check, across 64 schemas. It is interactive:
 press **Authorize**, paste a token from `POST /api/v1/auth/token`, and the whole
 booking flow can be exercised from the browser without any other tool.
 

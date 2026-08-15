@@ -10,13 +10,30 @@ dependency -> service -> datastore`, with `GenericResponse` envelopes and the
 `CustomErrorException` middleware.
 
 ```bash
-cp .env.example .env
 docker compose up --build
 docker compose exec api python -m app.seed --reset
 docker compose exec api pytest -v
 ```
 
 Swagger is then at **http://localhost:8000/docs**.
+
+---
+
+## Contents
+
+**Get it running** — [Running it](#running-it) · [Configuration](#configuration) · [Seeding the demo data](#seeding-the-demo-data) · [Tests](#tests) · [Without Docker](#running-without-docker)
+
+**The API** — [Endpoints](#endpoints) · [Statelessness](#statelessness) · [Times and dates](#times-and-dates)
+
+**The core mechanics** — [Seat locking](#seat-locking) · [Bookings](#bookings) · [Payment](#payment)
+
+**Real time** — [Real-time updates](#real-time-updates) · [Transport comparison](#transport-comparison)
+
+**Reference** — [Architecture](#architecture) · [Project structure](#project-structure) · [Collections](#collections) · [Not built](#not-built) · [Base template changes](#changes-made-to-the-base-template)
+
+> **In a hurry?** The table below maps each requirement in 4.3 to where it is
+> answered. [Seat locking](#seat-locking) and [Real-time updates](#real-time-updates)
+> are the two that carry the assignment.
 
 ---
 
@@ -31,7 +48,7 @@ Swagger is then at **http://localhost:8000/docs**.
 | Polling / WebSocket / HTTP2 comparison | [Transport comparison](#transport-comparison) | WebSocket chosen, polling shipped alongside as a fallback reading the same log, HTTP/2 push rejected with reasons |
 | API documentation, e.g. Swagger UI | `/docs` | Auto-generated OpenAPI, 64 schemas, every endpoint with request and response models |
 
-Beyond the brief: a **59-test suite** run against the live stack, three of whose
+Beyond the brief: a **59-test suite** run against the live stack, five of whose
 guarantees were confirmed by deliberately breaking the code to check the tests
 notice. See [Tests](#tests).
 
@@ -39,16 +56,16 @@ notice. See [Tests](#tests).
 
 ## Running it
 
-Docker is the only prerequisite. From a clone of the repository:
+Docker is the only prerequisite, and there is nothing to configure. From a
+clone of the repository:
 
 ```bash
 cd backend
-cp .env.example .env       # config; the defaults work as shipped
 docker compose up --build  # api on :8000, plus MongoDB and Redis
 ```
 
-`.env` is not committed, so it is copied from the template. The service refuses
-to start without it rather than booting with placeholder credentials.
+See [Configuration](#configuration) for the environment switch and where real
+credentials belong.
 
 Then open:
 
@@ -70,6 +87,53 @@ either is unavailable:
 }
 ```
 
+### Configuration
+
+Two kinds of file, and the split is the whole idea:
+
+```
+.env                 one line — ENVIRONMENT=local
+.env.local           the settings for it        committed
+.env.development     yours to create            git-ignored
+.env.production      yours to create            git-ignored
+```
+
+Switching target is one word:
+
+```bash
+echo 'ENVIRONMENT=development' > .env
+```
+
+Four things follow from that split:
+
+- **No variable carries an environment suffix.** `MONGO1_HOST` is the host for
+  whichever environment is selected, because the *file* is what distinguishes
+  them. The base template instead had `MONGO1_HOST_LOCAL`, `_DEV` and `_PROD`
+  side by side with a `SYSTEM_ENV` choosing between them. Adding a fourth
+  environment is now a new file, not a new code branch.
+- **`docker compose up` ignores the switch and always runs local**, because the
+  MongoDB and Redis it starts are the ones it points at; it names `.env.local`
+  directly. The switch is for running *outside* compose — see
+  [Running without Docker](#running-without-docker).
+- **Nothing is copied before the first run.** `.env` and `.env.local` are
+  committed because nothing in them is secret — those credentials address
+  containers on a private network and are worthless anywhere else. Every other
+  `.env.*` is git-ignored deny-by-default, so a `.env.production`, or a
+  `.env.staging` nobody anticipated, cannot be committed by accident. The
+  exception is scoped to `backend/`, leaving the Next.js client's own
+  `frontend/.env.local` ignored as that framework expects.
+- **A real environment variable always beats a file.** Under compose the
+  settings arrive injected and no `.env` file is even in the image; from a
+  terminal the same code reads them from disk. One mechanism, two ways of
+  running.
+
+A missing value says which of the two mistakes it was:
+
+```
+MONGO1_USER is not set. ENVIRONMENT=production, but .env.production
+does not exist and the value is not set in the environment either
+```
+
 ### Seeding the demo data
 
 The API starts with an empty database, so this is required before there is
@@ -79,22 +143,22 @@ anything to browse:
 docker compose exec api python -m app.seed --reset
 ```
 
-`--reset` **drops** the collections rather than emptying them, so indexes are
-rebuilt from the current declarations instead of surviving from an earlier
-schema. Without the flag the seeder upserts, repairing existing documents and
-leaving anything else alone. Either way it is safe to re-run, and it is the way
-back to a clean, known state.
+| | |
+| --- | --- |
+| **`--reset`** | **Drops** the collections rather than emptying them, so indexes rebuild from the current declarations instead of surviving from an earlier schema |
+| **without the flag** | Upserts — repairs existing documents, leaves anything else alone |
+| **either way** | Safe to re-run, and the way back to a clean, known state |
 
-The dataset follows the wireframes structurally — the A–H seating plan with the
-same crossed-out seats, the 9:20AM–9:20PM screenings, the combo line-up — but
-is localised to Malaysia: GSC Mid Valley Megamall, TGV Sunway Pyramid and GSC
-Gurney Plaza across Kuala Lumpur, Selangor and Penang, priced in MYR, with
-screening times computed in `Asia/Kuala_Lumpur`. The design shows Nigerian
+**The dataset follows the wireframes structurally** — the A–H seating plan with
+the same crossed-out seats, the 9:20AM–9:20PM screenings, the combo line-up —
+**but is localised to Malaysia**: GSC Mid Valley Megamall, TGV Sunway Pyramid
+and GSC Gurney Plaza across Kuala Lumpur, Selangor and Penang, priced in MYR,
+with screening times computed in `Asia/Kuala_Lumpur`. The design shows Nigerian
 cinemas and naira, which would read oddly in a Malaysian product.
 
-The seeder prints the demo `showtime_id` and re-derives the Booking Summary
-total, so a drift in seed prices is caught immediately rather than noticed
-against the design later:
+It prints the demo `showtime_id` and re-derives the Booking Summary total, so a
+drift in seed prices is caught immediately rather than noticed against the
+design later:
 
 ```
 Tickets           RM50.00     seats F4, F5 @ RM25.00
@@ -103,18 +167,19 @@ Service charge     RM0.50
 Total            RM104.50     matches the wireframe breakdown
 ```
 
-Prices are in **MYR**, held as integer minor units (sen). The wireframe is
-priced in naira, where a ticket is ₦2,500; the same figures are used at
-Malaysian scale, so a ticket is RM25.00 and the ₦10,450 total reads as
-RM104.50. The breakdown is unchanged, only the scale.
+Two details worth knowing:
 
-Screenings are generated for the next 7 days relative to the run date. The
-design shows November 2021, and screenings fixed to a past month would be
-filtered out by every showtime query, so only the times of day are taken
-literally.
+- **Money is MYR, held as integer minor units (sen)** — never floats. The
+  wireframe prices a ticket at ₦2,500; the same figures are used at Malaysian
+  scale, so a ticket is RM25.00 and the ₦10,450 total reads as RM104.50. The
+  breakdown is unchanged, only the scale.
+- **Screenings are generated for the next 7 days**, relative to the run date.
+  The design shows November 2021, and screenings fixed to a past month would be
+  filtered out by every showtime query as already started, so only the times of
+  day are taken literally.
 
-Note that the image copies the source at build time, so `docker compose up -d
---build` is needed for code changes to reach the container.
+> The image copies the source at build time, so `docker compose up -d --build`
+> is needed for code changes to reach the container.
 
 ### Tests
 
@@ -122,24 +187,19 @@ Note that the image copies the source at build time, so `docker compose up -d
 docker compose exec api pytest -v
 ```
 
-The suite runs against the live stack over HTTP, not in process. That is
+**The suite runs against the live stack over HTTP, not in process.** That is
 deliberate: gunicorn serves these requests from several worker processes, so a
-lock that held only within one event loop would fail here. Testing through the
-socket is what proves the guarantee survives horizontal scaling, which is the
-reason the lock lives in Redis rather than in memory.
+lock that held only within one event loop would pass a unit test and fail here.
+Testing through the socket is what proves the guarantee survives horizontal
+scaling — which is the whole reason the lock lives in Redis rather than memory.
 
-The headline test fires **50 simultaneous requests for one seat** and asserts
-exactly one `201` and forty-nine `409`. The rest cover all-or-nothing
-selection, holder-only release, TTL expiry, heartbeat behaviour, retry
-idempotency and locking a sold seat. The real-time tests cover push delivery to
-one and to several watchers, per-recipient `held_by_me`, and that polling
-returns the identical change at the identical version.
+| Suite | Covers |
+| --- | --- |
+| **Seat locking** | The headline test fires **50 simultaneous requests for one seat** and asserts exactly one `201` and forty-nine `409`. Plus all-or-nothing selection, holder-only release, TTL expiry, heartbeat, retry idempotency, locking a sold seat |
+| **Real time** | Push delivery to one and to several watchers, per-recipient `held_by_me`, polling returning the identical change at the identical version, and the `410` when a catch-up can no longer be completed |
+| **Booking · Payment** | The arithmetic against the design — two seats and a discounted combo come to **RM104.50**, the total printed on the Booking Summary and the ticket |
 
-The booking and payment tests check the arithmetic against the design: two
-seats and a discounted combo come to **RM104.50**, the total printed on the
-Booking Summary screen and on the ticket.
-
-The suites were verified to actually fail when they should, by breaking the
+**The suites were verified to actually fail when they should**, by breaking the
 code they cover:
 
 * removing the conflict check from the Lua script let all 50 racers win the
@@ -153,14 +213,15 @@ code they cover:
   asserting a client sitting on the oldest surviving entry is still served —
   so the check cannot quietly become over-eager either
 
-One mutation was more informative for passing. Removing the atomic claim from
-the payment path did **not** break anything: twelve concurrent payments still
-produced a single charge, because the unique index on `seat_reservations` is
-what actually serialises them. That prompted a closer look at the rollback,
-which was deleting reservations by `booking_id` — too broad if two requests for
-one booking ever reserved at the same time, since a losing request would delete
-rows the winner had just written. It now removes only the ids the failing
-attempt itself inserted.
+> **One mutation was more informative for passing.** Removing the atomic claim
+> from the payment path broke **nothing** — twelve concurrent payments still
+> produced a single charge, because the unique index on `seat_reservations` is
+> what actually serialises them.
+>
+> That sent me to look at the rollback, which was deleting reservations by
+> `booking_id` — too broad if two requests for one booking ever reserved at the
+> same time, since the loser would delete rows the winner had just written. It
+> now removes only the ids the failing attempt itself inserted.
 
 ```
 tests/test_booking_flow.py .......................
@@ -172,12 +233,49 @@ tests/test_seat_lock_concurrency.py ..........
 
 ### Running without Docker
 
+This is the case the environment switch exists for: the service on the host,
+talking to datastores over published ports instead of by compose hostname.
+
+It serves on **:8000** either way — the same port compose publishes — so stop
+the containerised API first and leave MongoDB and Redis running for it to use:
+
+```bash
+docker compose stop api    # frees :8000; mongo and redis stay up
+```
+
+Then create a `.env.development` naming datastores this process can actually
+reach: `localhost:27017` and `localhost:6379`, rather than the compose hostnames
+`mongo:27017` and `redis:6379` which only resolve inside the compose network.
+
+**If this machine already runs MongoDB or Redis of its own, those ports are
+taken** — `localhost:27017` reaches your own server rather than the container,
+and the failure looks like an authentication error rather than a wrong address.
+Publish the containers somewhere else and point at that instead:
+
+```bash
+MONGO_PORT=27018 REDIS_PORT=6380 docker compose up -d mongo redis
+```
+
+Those two are read by compose from the shell or `.env`, never from
+`.env.local` — compose only forwards that file to containers, it does not
+interpolate from it.
+
+With the datastores reachable, point `.env` at the new environment:
+
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-# point MONGO1_HOST_LOCAL / REDIS1_HOST_LOCAL at localhost in .env, then:
-python -m app.main
+
+echo 'ENVIRONMENT=development' > .env
+python -m app.main         # or: uv run -m app.main
 ```
+
+The port never changes, so Swagger, the tests and the demo client all carry on
+pointing at `http://localhost:8000` without being told which way the service was
+started. Running both at once is the one thing that does not work, and it fails
+immediately and obviously with a port already in use.
+
+`docker compose start api` puts things back.
 
 ---
 
@@ -228,8 +326,8 @@ In Swagger, paste the returned `access_token` into **Authorize**.
 
 ### Statelessness
 
-Nothing is held in a worker between requests. There is no session store, no
-sticky routing and no in-memory cache of anything a later request depends on:
+**Nothing is held in a worker between requests.** No session store, no sticky
+routing, no in-memory cache of anything a later request depends on:
 
 * **Identity** travels in the request. The JWT carries `sub`, `name`, `iss`,
   `aud`, `iat` and `exp`, and is verified on each call with the algorithm
@@ -243,19 +341,19 @@ sticky routing and no in-memory cache of anything a later request depends on:
   subscriber, and a client can reconnect to a different worker and catch up
   with `?since=`.
 
-The application runs under **four gunicorn workers** and the suite drives it
-over HTTP for exactly that reason — a guarantee that only held inside one event
-loop would fail there. The fan-out was checked directly across processes: with
-the socket on worker `pid 9` and eight locks handled by `pid 10` and `pid 7`,
-none by `pid 9`, the socket still received all eight changes.
+**Proven, not asserted.** The app runs under four gunicorn workers and the suite
+drives it over HTTP for exactly that reason — a guarantee holding only inside
+one event loop would fail there. The fan-out was checked across processes: the
+socket on worker `pid 9`, eight locks handled by `pid 10` and `pid 7`, none by
+`pid 9` — and the socket still received all eight changes.
 
-The practical consequence is that the service scales by adding workers or
-containers, with no shared memory and nothing to drain on deploy.
+The practical consequence: **the service scales by adding workers or containers**,
+with no shared memory and nothing to drain on deploy.
 
-Guest tokens are issued on demand, so this is identity rather than access
-control: it proves *which* caller holds a seat, and stops one user releasing
-another's. It does not stop a determined client requesting many tokens — that
-is a rate limiting concern, noted under [Not built](#not-built).
+> **Scope note.** Guest tokens are issued on demand, so this is *identity*, not
+> access control. It proves which caller holds a seat and stops one user
+> releasing another's. It does not stop a client requesting many tokens — that
+> is rate limiting, noted under [Not built](#not-built).
 
 ### Seat locking
 
@@ -309,30 +407,24 @@ lock      ephemeral   Redis     "I am choosing this seat"
 booking   durable     MongoDB   "this is what I intend to buy"
 ```
 
-A booking can only be created for seats the caller **already holds**, so a
-client cannot skip the seating plan and book seats it never locked. Creating
-one extends those holds from the short seat-picking TTL to the longer checkout
-window, and sets the booking's `expires_at` to match, so the two never disagree
-about when the hold ends.
-
-Expiry is resolved when a booking is read, not by a scheduled job. The seats are
-already free by then, released by the Redis TTL; this only brings the booking's
-status into line, which keeps the service stateless with nothing running in the
-background.
-
-`PUT /bookings/{id}/fnb` replaces the whole order rather than appending, which
-matches a screen where quantities are adjusted then confirmed and makes the call
-idempotent — sending it twice cannot double the order. A quantity of zero
-removes an item and an empty list clears it, which is what Skip does. **Prices
-come from the catalogue, never from the request**, so a client cannot choose
-what it pays.
-
-Cancelling releases the holds immediately and broadcasts the change, so everyone
-watching the plan sees the seats reappear instead of waiting out the TTL.
-
-Screening details are copied onto the booking rather than joined at read time,
-so the summary and the ticket render from one document and still read correctly
-long after the catalogue has moved on.
+- **Only seats you already hold.** A booking cannot be created for seats the
+  caller never locked, so a client cannot skip the seating plan. Creating one
+  extends those holds from the seat-picking TTL to the checkout window and sets
+  `expires_at` to match, so the two never disagree about when the hold ends.
+- **Expiry is resolved on read**, not by a scheduled job. The seats are already
+  free by then — the Redis TTL did that — so this only brings the booking's
+  *status* into line, and nothing runs in the background.
+- **The food order is replaced, not appended.** `PUT /bookings/{id}/fnb` matches
+  a screen where quantities are adjusted then confirmed, and is idempotent:
+  sending it twice cannot double the order. Quantity zero removes an item, an
+  empty list clears it — which is what Skip does.
+- **Prices come from the catalogue, never the request**, so a client cannot
+  choose what it pays.
+- **Cancelling releases holds immediately** and broadcasts the change, so
+  watchers see the seats reappear instead of waiting out the TTL.
+- **Screening details are copied onto the booking**, not joined at read time, so
+  the summary and ticket render from one document and still read correctly long
+  after the catalogue has moved on.
 
 ### Payment
 
@@ -499,6 +591,7 @@ app/
 ├── workers.py                  gunicorn worker class (WebSocket enabled)
 ├── core/
 │   ├── config.py               settings, Mongo and Redis URI construction
+│   ├── environment.py          reads .env, then the .env.<name> it names
 │   ├── construct_services.py   dependency injection for every service
 │   ├── security.py             JWT mint and verify, caller identity
 │   └── logging_config.py       stdout logging, honours APP_LOGGING_LEVEL
@@ -527,7 +620,7 @@ app/
 ├── seed/                       wireframe dataset and seeder
 ├── middleware/                 exception handling, process time logging
 ├── helpers/                    the GenericResponse envelope
-└── utilities/                  credential resolution, local time formatting
+└── utilities/                  local time formatting
 
 tests/
 ├── conftest.py                 fixtures; lock purging between tests
@@ -590,15 +683,27 @@ Deliberate omissions, so the scope is explicit rather than left to be inferred.
 
 ## Changes made to the base template
 
-The base could not start or build as handed over. Each change below was needed
-to get a running stack; the original files and patterns are otherwise intact.
+**The base could not start or build as handed over.** The Dockerfile copied key
+files that are not in the repo, `gunicorn_conf.py` referenced a worker class
+that did not exist, the Mongo URI was hardcoded to `mongodb+srv://` (which needs
+DNS SRV records and cannot address a local container), and `requirements.txt`
+pulled a scientific stack unrelated to this service.
+
+Each change below was needed to get a running stack; the original files and
+patterns are otherwise intact.
+
+<details>
+<summary><b>15 changes to the base template, each with its reason</b></summary>
+
+<br>
 
 | File | Change | Why |
 | --- | --- | --- |
 | `app/databases/mongodb/config.py` | URI map resolved lazily, added `close()` | Avoids requiring credentials at import time, and gives a clean shutdown |
 | `app/databases/mongodb/db.py` | `tz_aware=True` on the client | The driver returns naive datetimes by default, so a screening serialised as `2026-08-14T01:20:00` with no designator and a client would read it as local time |
-| `app/core/config.py` | `MONGO1_SCHEME` / `MONGO1_OPTIONS`, Redis config, JWT and lock settings | The URI was hardcoded to `mongodb+srv://`, which needs DNS SRV records and cannot address a local container |
-| `app/utilities/prefered_environment.py` | Added the `redis1` credential branch | Follows the existing per environment credential pattern |
+| `app/core/config.py` | `MONGO1_SCHEME` / `MONGO1_OPTIONS`, Redis config, JWT and lock settings; suffixed credential lookup replaced by plain names | The URI was hardcoded to `mongodb+srv://`, which needs DNS SRV records and cannot address a local container |
+| `app/core/environment.py` | **Added** | Loads `.env` for the environment name, then the `.env.<name>` file it points at, without overriding anything already in the real environment — see [Configuration](#configuration) |
+| `app/utilities/prefered_environment.py` | **Removed**, replaced by `app/core/environment.py` | It selected credentials by variable suffix (`MONGO1_HOST_LOCAL` / `_DEV` / `_PROD`) from one file. Splitting per file drops the suffixes, so the same names mean different things per environment and adding a fourth needs no code change — see [Configuration](#configuration) |
 | `app/middleware/exception.py` | Stack trace withheld in production | Every `500` returned a traceback in a `debug` field, exposing internal paths |
 | `app/main.py` | CORS made the outermost middleware, `allow_credentials=False` | `add_middleware` prepends, so registering the exception handler last put it *outside* CORS and its `4xx` responses never passed back through. Every error reached a browser with no `Access-Control-Allow-Origin` and was blocked, including the `409` naming contested seats. Credentials are off because auth is a bearer header, and pairing them with `allow_origins=["*"]` is invalid |
 | `app/workers.py` | **Added** | `gunicorn_conf.py` referenced `app.workers.ConfigurableWorker`, which did not exist, so the Docker entrypoint failed on start |
@@ -608,13 +713,20 @@ to get a running stack; the original files and patterns are otherwise intact.
 | `.gitignore` | `tests/*` no longer ignored | The concurrency test suite is part of the deliverable |
 | `app/main.py` | Cinema identity, lifespan, dependency aware health check | Replaced the template scaffold |
 | `pyproject.toml` | Renamed and dependencies aligned | Still declared the template project name and the removed packages |
-| `uv.lock` | **Removed** | Locked the trimmed dependency set and contradicted `requirements.txt`, which is what the image installs |
+| `uv.lock` | Regenerated | It pinned the base template's original dependency set, including packages this service never imports, so it contradicted the trimmed `requirements.txt` the image installs. Rebuilt against the trimmed set instead of deleted, since `uv run -m app.main` is offered as a way to start the service |
+
+</details>
 
 ### Removed template scaffolding
 
 The base carried a demo file-server module and a set of utilities this service
 never calls. All of it has been deleted rather than left dead in the tree, so
 that everything present is something the booking flow actually uses.
+
+<details>
+<summary><b>Everything removed, and what each was</b></summary>
+
+<br>
 
 | Removed | Was |
 | --- | --- |
@@ -625,7 +737,10 @@ that everything present is something the booking flow actually uses.
 | `utilities/custom_exception_handler.py` | Superseded by the exception middleware |
 | `utilities/generic_response.py` | A duplicate of the one in `helpers/`, which is the one imported |
 | `utilities/logger.py` | Configured logging on import, but nothing imported it |
+| `utilities/db_credential_check.py` | Validated that credentials were present and non-empty. Once each one is read through a helper that already refuses a missing value, this could no longer fail — and a check that cannot fail is worse than none, because it implies a guarantee it is not providing |
 | `schemas/app_schema.py` | An enum of unrelated application codes |
+
+</details>
 
 Dropping the MySQL layer also took `sqlalchemy` and `pymysql` out of the
 dependency list. `core/construct_services.py` existed only to wire the demo

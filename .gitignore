@@ -17,10 +17,23 @@ REF/
 # ---------------------------------------------------------------------------
 # Secrets and environment
 # ---------------------------------------------------------------------------
-# Only .env.example is committed; real credentials never are.
-.env
+# The backend switches environment through `.env` (one line, ENVIRONMENT=name)
+# and reads its settings from `.env.<name>` beside it.
+#
+# `backend/.env` and `backend/.env.local` are committed, because neither holds
+# anything secret — the local credentials address containers on a private
+# compose network and are useless outside it. Committing them is what lets a
+# fresh clone run with no copying step.
+#
+# Everything else matching `.env.*` is a real deployment's credentials: ignored
+# deny-by-default, so `backend/.env.production` — or a `.env.staging` nobody
+# anticipated — cannot be committed by accident.
+#
+# The exception is scoped to `backend/` on purpose. `frontend/.env.local` is a
+# Next.js file, where the convention is the opposite: it is where local secrets
+# go and it must stay ignored. An unscoped `!.env.local` would expose it.
 .env.*
-!.env.example
+!backend/.env.local
 .data/
 
 # ---------------------------------------------------------------------------

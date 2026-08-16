@@ -130,7 +130,7 @@ supplied base template with the reason for each.
 ## Verifying the claims
 
 ```bash
-docker compose exec api pytest -v          # 61 tests
+docker compose exec api pytest -v          # 66 tests
 ```
 
 The suite runs against the **live stack over HTTP**, not in process, because
@@ -140,13 +140,12 @@ event loop would pass a unit test and fail in production.
 The headline test fires **50 simultaneous requests for one seat** and asserts
 exactly one `201` and forty-nine `409`.
 
-Six guarantees were confirmed by deliberately breaking the code to check the
+Seven guarantees were confirmed by deliberately breaking the code to check the
 tests notice: removing the conflict check from the Lua script let all 50 racers
 win, disabling the WebSocket fan-out timed out the push tests, removing the
 idempotency guard broke the payment retry test, the two halves of the reconnect
-catch-up guard — bypassing it, then making it always reject — each failed the
-tests written for them, and unregistering the validation handler broke the
-error-envelope test.
+catch-up guard each failed the tests written for them, and unregistering either
+error handler put `422`, `404` and `405` back to the framework's raw shape.
 
 A seventh mutation *passed*, which turned out to be more useful: it exposed a
 rollback bug one layer down. That story is in

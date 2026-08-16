@@ -48,7 +48,7 @@ Swagger is then at **http://localhost:8000/docs**.
 | Polling / WebSocket / HTTP2 comparison | [Transport comparison](#transport-comparison) | WebSocket chosen, polling shipped alongside as a fallback reading the same log, HTTP/2 push rejected with reasons |
 | API documentation, e.g. Swagger UI | `/docs` | Auto-generated OpenAPI, 64 schemas, every endpoint with request and response models |
 
-Beyond the brief: a **61-test suite** run against the live stack, six of whose
+Beyond the brief: a **66-test suite** run against the live stack, seven of whose
 guarantees were confirmed by deliberately breaking the code to check the tests
 notice. See [Tests](#tests).
 
@@ -198,6 +198,7 @@ scaling — which is the whole reason the lock lives in Redis rather than memory
 | **Seat locking** | The headline test fires **50 simultaneous requests for one seat** and asserts exactly one `201` and forty-nine `409`. Plus all-or-nothing selection, holder-only release, TTL expiry, heartbeat, retry idempotency, locking a sold seat |
 | **Real time** | Push delivery to one and to several watchers, per-recipient `held_by_me`, polling returning the identical change at the identical version, and the `410` when a catch-up can no longer be completed |
 | **Booking · Payment** | The arithmetic against the design — two seats and a discounted combo come to **RM104.50**, the total printed on the Booking Summary and the ticket |
+| **Error contract** | That every failure carries the same `{success, error, message}` envelope — including the 404 and 405 the router raises, which no code here ever sees |
 
 **The suites were verified to actually fail when they should**, by breaking the
 code they cover:
@@ -214,6 +215,8 @@ code they cover:
   so the check cannot quietly become over-eager either
 * unregistering the validation handler put `422` back to FastAPI's raw
   `{"detail": [...]}` shape, and the envelope test caught it
+* unregistering the HTTP exception handler did the same to `404` and `405`,
+  caught by the error contract tests
 
 > **One mutation was more informative for passing.** Removing the atomic claim
 > from the payment path broke **nothing** — twelve concurrent payments still
@@ -227,10 +230,11 @@ code they cover:
 
 ```
 tests/test_booking_flow.py ...................
+tests/test_error_contract.py .....
 tests/test_payment_flow.py ...................
 tests/test_realtime.py .............
 tests/test_seat_lock_concurrency.py ..........
-61 passed
+66 passed
 ```
 
 ### Running without Docker
@@ -630,6 +634,7 @@ app/
 
 tests/
 ├── conftest.py                 fixtures; lock purging between tests
+├── test_error_contract.py      one error shape, whoever produced it
 ├── test_seat_lock_concurrency.py
 ├── test_realtime.py
 ├── test_booking_flow.py

@@ -3,9 +3,10 @@ import re
 import traceback
 from typing import Any, Iterable, Optional
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
@@ -43,6 +44,28 @@ def _field_path(location: Iterable[Any]) -> str:
     parts = [str(part) for part in location
              if part not in ("body", "query", "path", "header", "cookie")]
     return ".".join(parts)
+
+
+async def http_exception_handler(
+        request: Request, exc: HTTPException) -> JSONResponse:
+    """Return the envelope for the errors the framework raises on our behalf.
+
+    A mistyped URL and a wrong method never reach a route, so nothing in this
+    codebase gets to answer them — Starlette raises `HTTPException` during
+    routing and FastAPI's default handler renders `{"detail": ...}`. That is a
+    second error shape for a client to parse, arriving precisely when it is
+    least expected, and it is what makes a typo look like an outage.
+
+    Registered against **Starlette's** `HTTPException`, not FastAPI's. FastAPI's
+    is a subclass, and a handler registered for a subclass never sees the parent
+    the router actually raises — so binding to the subclass would silently keep
+    the default for exactly the 404 and 405 this exists to fix.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=_error_body("HTTPException", str(exc.detail), ""),
+        headers=getattr(exc, "headers", None),
+    )
 
 
 async def validation_exception_handler(
@@ -102,13 +125,11 @@ class ExceptionHandler(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             return await call_next(request)
-        except HTTPException as http_exception:
-            return JSONResponse(
-                status_code=http_exception.status_code,
-                content={'success': False, "error": "Client Error",
-                         "message": str(http_exception.detail)},
-            )
-
+        # No `except HTTPException` here. FastAPI installs a handler for it
+        # that runs *inside* this middleware, so one raised in a route is
+        # already a response by the time it reaches here — the branch that used
+        # to sit at this spot could never fire. `http_exception_handler` above
+        # is where that case is answered now.
         except CustomErrorException as custom_exc:
 
             # Try to get the original exception's traceback

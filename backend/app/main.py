@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from app.middleware.exception import (
     ExceptionHandler,
+    http_exception_handler,
     validation_exception_handler,
 )
 from app.middleware import process_time_log
@@ -22,8 +23,11 @@ from app.routes import (
     venues,
 )
 from app.services.realtime_services import broadcaster
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+# Starlette's, not FastAPI's: the router raises the parent class for 404 and
+# 405, and a handler bound to the subclass would never see it.
+from starlette.exceptions import HTTPException
 import asyncio
 import logging
 import uvicorn
@@ -102,6 +106,34 @@ app = FastAPI(
 app.add_middleware(ExceptionHandler)
 app.middleware("http")(process_time_log.log)
 
+
+async def timeout_middleware(request: Request, call_next):
+    """Fail a request that has run far too long, rather than hanging forever.
+
+    It **returns** a response rather than raising. Raising here would not work:
+    an exception thrown inside a middleware travels outward, past the handler
+    that would have turned it into a 504, and surfaces as an unhandled 500 —
+    the opposite of a legible timeout.
+
+    WebSocket traffic never reaches HTTP middleware, so a long lived seating
+    plan subscription is unaffected by this.
+    """
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=600)
+    except asyncio.TimeoutError:
+        logger.warning("Timed out: %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=504,
+            content={"success": False, "error": "Timeout",
+                     "message": "Request timeout"},
+        )
+
+
+# Registered here, before CORS, so that CORS ends up outside it and a 504 still
+# carries Access-Control-Allow-Origin. Registering it after would repeat the
+# very mistake described above, on the one response a browser cannot retry.
+app.middleware("http")(timeout_middleware)
+
 # A rejected request body is answered in the same envelope as every other
 # failure. FastAPI's default 422 body carries no `message`, so a client that
 # reads one everywhere else is left showing an unexplained error. Registered as
@@ -109,6 +141,12 @@ app.middleware("http")(process_time_log.log)
 # during routing, before the middleware chain sees a response — but the reply
 # still travels back out through CORS, which is what the comment above is about.
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+# Same reason, for the errors raised during routing rather than inside a route:
+# a mistyped URL is a 404 and a wrong verb is a 405, and neither reaches any
+# code here. FastAPI's default renders `{"detail": ...}`, a second error shape
+# for a client to parse.
+app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_middleware(
     CORSMiddleware,
     # False, not True: authentication is a bearer header rather than a cookie,
@@ -120,16 +158,6 @@ app.add_middleware(
     allow_headers=["*"],
     allow_origins=["*"],
 )
-
-
-@app.middleware("http")
-async def timeout_middleware(request: Request, call_next):
-    # WebSocket traffic never reaches HTTP middleware, so a long lived seating
-    # plan subscription is not affected by this timeout.
-    try:
-        return await asyncio.wait_for(call_next(request), timeout=600)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Request timeout")
 
 
 F = TypeVar("F", bound=Callable[..., Any])

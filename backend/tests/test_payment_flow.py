@@ -220,6 +220,56 @@ async def test_card_details_are_validated(
         assert response.status_code == 422, f"accepted bad card: {card}"
 
 
+async def test_a_validation_error_reads_like_every_other_error(
+        api, token, auth_header, showtime_id, free_seats):
+    """A 422 must carry the same envelope as every other failure.
+
+    FastAPI's default validation body is `{"detail": [...]}` with no `message`
+    field, so a client that reads `message` everywhere else falls back to a
+    generic "request failed" and the reason — which field, and why — never
+    reaches the user. The status code alone is not the contract.
+    """
+    seats = free_seats[:1]
+    user, booking = await _booking(api, token, auth_header, showtime_id, seats)
+
+    response = await api.post(
+        f"/bookings/{booking['id']}/pay",
+        json={"method": "debit_card",
+              "card": {"number": "4242 4242 4242 4242",
+                       "expiry": "1111", "cvv": "111"}},
+        headers=auth_header(user))
+
+    assert response.status_code == 422
+    body = response.json()
+
+    assert body["success"] is False, body
+    # The reason a human can act on, in the field every other error uses.
+    assert "MM/YY" in body["message"], body
+    # And which input to go and fix.
+    assert body["details"]["fields"][0]["field"] == "card.expiry", body
+
+
+async def test_an_impossible_month_is_reported_as_a_month_problem(
+        api, token, auth_header, showtime_id, free_seats):
+    """"13/29" has the right shape and a wrong month, and should say which.
+
+    Calling it a format error sends the user to check punctuation that is
+    already correct — the slash is exactly where it belongs.
+    """
+    seats = free_seats[:1]
+    user, booking = await _booking(api, token, auth_header, showtime_id, seats)
+
+    response = await api.post(
+        f"/bookings/{booking['id']}/pay",
+        json={"method": "debit_card",
+              "card": {"number": "4242 4242 4242 4242",
+                       "expiry": "13/29", "cvv": "123"}},
+        headers=auth_header(user))
+
+    assert response.status_code == 422
+    assert "month" in response.json()["message"].lower(), response.json()
+
+
 async def test_card_is_required_for_a_card_payment(
         api, token, auth_header, showtime_id, free_seats):
     seats = free_seats[:1]

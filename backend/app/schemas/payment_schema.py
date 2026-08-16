@@ -16,7 +16,12 @@ from pydantic import BaseModel, Field, field_validator
 from app.schemas.common_schema import Money, PaymentMethod, PaymentStatus
 
 _DIGITS = re.compile(r"\D")
-_EXPIRY = re.compile(r"^(0[1-9]|1[0-2])\s*/\s*(\d{2})$")
+
+# Shape only. The month range is checked separately so the two failures can be
+# told apart: "13/29" is punctuated correctly and reporting it as a format
+# problem sends the user to look at a slash that is exactly where it belongs.
+# A single-digit month is accepted and normalised, since "1/29" is unambiguous.
+_EXPIRY = re.compile(r"^(\d{1,2})\s*/\s*(\d{2})$")
 
 
 def _luhn_ok(number: str) -> bool:
@@ -62,6 +67,9 @@ class CardDetails(BaseModel):
             raise ValueError("Expiry must be in MM/YY format")
 
         month, year = int(match.group(1)), 2000 + int(match.group(2))
+        if not 1 <= month <= 12:
+            raise ValueError("Expiry month must be between 01 and 12")
+
         now = datetime.now(timezone.utc)
         # A card is valid through the end of its expiry month.
         if (year, month) < (now.year, now.month):

@@ -44,14 +44,36 @@ logger = logging.getLogger(__name__)
 # Returns an empty array on success, otherwise the seats that are held by
 # someone else. Re-locking a seat the caller already holds is allowed and
 # refreshes its TTL, which makes the endpoint idempotent under a client retry.
+#
+# Reading the Lua, for anyone who has not met it before. Four idioms cover all
+# three scripts below, and nothing else here is Lua-specific:
+#
+#   #x                length of x
+#   ~=                not equal
+#   for i = 1, #x     arrays start at 1, and the range includes both ends
+#   {}                an empty list
+#
+# Redis passes the script two arrays: KEYS (the keys it will touch, declared
+# separately so a clustered Redis can route the call) and ARGV (everything
+# else). Here KEYS holds one lock key per seat, and ARGV is the holder, the TTL,
+# then the seat names.
 _ACQUIRE_LUA = """
 local holder = ARGV[1]
-local ttl_ms = tonumber(ARGV[2])
+local ttl_ms = tonumber(ARGV[2])   -- ARGV values arrive as strings
 local conflicts = {}
 
+-- First pass: look, do not touch. Only after every seat has been checked is it
+-- safe to claim any of them.
 for i = 1, #KEYS do
     local current = redis.call('GET', KEYS[i])
+    -- `current` is false when the key is unset, so this is "held, by someone
+    -- who is not the caller". A seat the caller already holds is not a
+    -- conflict; the second pass simply refreshes its TTL.
     if current and current ~= holder then
+        -- KEYS[i] is the lock key; the seat name for the same position sits at
+        -- ARGV[i + 2], because ARGV[1] and ARGV[2] are the holder and the TTL.
+        -- Returning names rather than keys is what lets the API answer 409 with
+        -- exactly which seats lost.
         conflicts[#conflicts + 1] = ARGV[i + 2]
     end
 end
@@ -60,11 +82,15 @@ if #conflicts > 0 then
     return conflicts
 end
 
+-- Second pass: claim everything. Kept separate from the first on purpose —
+-- claiming as it went would leave the earlier seats held when a later one
+-- turned out to be taken, and rolling those back is the failure mode this
+-- design exists to avoid.
 for i = 1, #KEYS do
     redis.call('SET', KEYS[i], holder, 'PX', ttl_ms)
 end
 
-return {}
+return {}   -- empty list: nothing conflicted
 """
 
 # Release only the seats this caller actually holds.
@@ -73,13 +99,17 @@ local holder = ARGV[1]
 local released = {}
 
 for i = 1, #KEYS do
+    -- Compare and delete in one indivisible step. Splitting them — read the
+    -- holder, then delete — would leave a gap in which the lock could expire
+    -- and be re-taken by someone else, and this would delete their hold.
     if redis.call('GET', KEYS[i]) == holder then
         redis.call('DEL', KEYS[i])
+        -- Only one leading ARGV here (the holder), so seat names start at 2.
         released[#released + 1] = ARGV[i + 1]
     end
 end
 
-return released
+return released   -- what was actually freed; anything else was not ours
 """
 
 # Extend only the seats this caller still holds. A seat whose TTL already
@@ -90,13 +120,17 @@ local ttl_ms = tonumber(ARGV[2])
 local extended = {}
 
 for i = 1, #KEYS do
+    -- PEXPIRE, not SET: it pushes the deadline out on a key that still exists.
+    -- A hold that already lapsed is simply absent, so nothing happens and the
+    -- seat stays out of the returned list — which is how the caller learns it
+    -- lost the seat rather than silently reclaiming someone else's.
     if redis.call('GET', KEYS[i]) == holder then
         redis.call('PEXPIRE', KEYS[i], ttl_ms)
         extended[#extended + 1] = ARGV[i + 2]
     end
 end
 
-return extended
+return extended   -- the seats still held; an empty list means the selection is gone
 """
 
 

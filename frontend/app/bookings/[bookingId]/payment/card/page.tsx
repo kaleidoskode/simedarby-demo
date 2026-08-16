@@ -23,6 +23,30 @@ import { ApiError, api } from "@/lib/api";
 import { useSession } from "@/lib/SessionProvider";
 import type { Booking } from "@/lib/types";
 
+/** The shape the API accepts: two digits, a slash, two digits. */
+const EXPIRY = /^\d{2}\/\d{2}$/;
+
+/**
+ * Insert the slash as the user types, so "1111" becomes "11/11".
+ *
+ * Nobody should have to type punctuation to satisfy a format. Without this the
+ * field accepts "1111", which looks finished and is rejected by the server for
+ * not being MM/YY — a round trip to learn something the form knew all along.
+ *
+ * Typing the slash yourself still works, and so does pasting "12/29": every
+ * non-digit is stripped before the separator is put back in one known place.
+ */
+function formatExpiry(input: string): string {
+  let digits = input.replace(/\D/g, "").slice(0, 4);
+
+  // No month starts with 2 through 9, so a lone "3" can only mean March.
+  // Filling the zero in saves the user discovering that "3" then "9" gives a
+  // month of 39.
+  if (digits.length === 1 && digits > "1") digits = `0${digits}`;
+
+  return digits.length <= 2 ? digits : `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
 export default function CardPaymentPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const router = useRouter();
@@ -77,7 +101,8 @@ export default function CardPaymentPage() {
 
   if (!booking && !error) return <Spinner label="Loading…" />;
 
-  const ready = number.replace(/\D/g, "").length >= 13 && expiry.length >= 4 && cvv.length >= 3;
+  const ready =
+    number.replace(/\D/g, "").length >= 13 && EXPIRY.test(expiry) && cvv.length >= 3;
 
   return (
     <main className="flex min-h-screen flex-col">
@@ -101,8 +126,10 @@ export default function CardPaymentPage() {
             <label className="block text-[11px] text-muted">Expiry date</label>
             <input
               value={expiry}
-              onChange={(event) => setExpiry(event.target.value)}
+              onChange={(event) => setExpiry(formatExpiry(event.target.value))}
               placeholder="MM/YY"
+              inputMode="numeric"
+              maxLength={5}
               autoComplete="off"
               className="mt-1.5 w-full rounded-lg border border-border bg-surface-raised px-3 py-3 text-sm outline-none placeholder:text-muted focus:border-accent"
             />
@@ -140,7 +167,10 @@ export default function CardPaymentPage() {
           <p>
             <span className="font-mono">4000 0000 0000 0002</span> is declined
           </p>
-          <p className="mt-1">Any future expiry and a 3-digit CVV.</p>
+          <p className="mt-1">
+            Expiry <span className="font-mono">MM/YY</span>, any future date —
+            try <span className="font-mono">12/29</span> — and a 3-digit CVV.
+          </p>
         </div>
       </div>
 

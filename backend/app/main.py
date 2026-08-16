@@ -1,5 +1,8 @@
 from contextlib import asynccontextmanager
-from app.middleware.exception import ExceptionHandler
+from app.middleware.exception import (
+    ExceptionHandler,
+    validation_exception_handler,
+)
 from app.middleware import process_time_log
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -20,6 +23,7 @@ from app.routes import (
 )
 from app.services.realtime_services import broadcaster
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 import asyncio
 import logging
 import uvicorn
@@ -97,6 +101,14 @@ app = FastAPI(
 # exactly the clients that needed them.
 app.add_middleware(ExceptionHandler)
 app.middleware("http")(process_time_log.log)
+
+# A rejected request body is answered in the same envelope as every other
+# failure. FastAPI's default 422 body carries no `message`, so a client that
+# reads one everywhere else is left showing an unexplained error. Registered as
+# a handler rather than in the middleware above because FastAPI raises this
+# during routing, before the middleware chain sees a response — but the reply
+# still travels back out through CORS, which is what the comment above is about.
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_middleware(
     CORSMiddleware,
     # False, not True: authentication is a bearer header rather than a cookie,

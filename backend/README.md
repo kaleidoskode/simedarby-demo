@@ -48,7 +48,7 @@ Swagger is then at **http://localhost:8000/docs**.
 | Polling / WebSocket / HTTP2 comparison | [Transport comparison](#transport-comparison) | WebSocket chosen, polling shipped alongside as a fallback reading the same log, HTTP/2 push rejected with reasons |
 | API documentation, e.g. Swagger UI | `/docs` | Auto-generated OpenAPI, 64 schemas, every endpoint with request and response models |
 
-Beyond the brief: a **59-test suite** run against the live stack, five of whose
+Beyond the brief: a **61-test suite** run against the live stack, six of whose
 guarantees were confirmed by deliberately breaking the code to check the tests
 notice. See [Tests](#tests).
 
@@ -212,6 +212,8 @@ code they cover:
 * making that same check always reject failed five tests, including the one
   asserting a client sitting on the oldest surviving entry is still served —
   so the check cannot quietly become over-eager either
+* unregistering the validation handler put `422` back to FastAPI's raw
+  `{"detail": [...]}` shape, and the envelope test caught it
 
 > **One mutation was more informative for passing.** Removing the atomic claim
 > from the payment path broke **nothing** — twelve concurrent payments still
@@ -224,11 +226,11 @@ code they cover:
 > now removes only the ids the failing attempt itself inserted.
 
 ```
-tests/test_booking_flow.py .......................
-tests/test_payment_flow.py .................
+tests/test_booking_flow.py ...................
+tests/test_payment_flow.py ...................
 tests/test_realtime.py .............
 tests/test_seat_lock_concurrency.py ..........
-59 passed
+61 passed
 ```
 
 ### Running without Docker

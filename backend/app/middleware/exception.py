@@ -1,8 +1,10 @@
 import logging
+import re
 import traceback
-from typing import Optional
+from typing import Any, Iterable, Optional
 
 from fastapi import Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -10,6 +12,10 @@ from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)
+
+# Pydantic prefixes a custom ValueError with "Value error, ". The text after it
+# is the sentence written for a human, which is the part worth returning.
+_VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
 
 
 def _error_body(error: str, message: str, traceback_text: str,
@@ -22,9 +28,54 @@ def _error_body(error: str, message: str, traceback_text: str,
     body = {"success": False, "error": error, "message": message}
     if details:
         body["details"] = details
-    if settings.expose_error_debug:
+    if settings.expose_error_debug and traceback_text:
         body["debug"] = traceback_text
     return body
+
+
+def _field_path(location: Iterable[Any]) -> str:
+    """Name the offending field the way the caller wrote it.
+
+    Pydantic reports `("body", "card", "expiry")`. The leading marker says
+    where in the request it was found, which the caller already knows, so what
+    is left is the path inside their own payload: `card.expiry`.
+    """
+    parts = [str(part) for part in location
+             if part not in ("body", "query", "path", "header", "cookie")]
+    return ".".join(parts)
+
+
+async def validation_exception_handler(
+        request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Return a 422 in the same envelope as every other failure.
+
+    FastAPI's default body is `{"detail": [...]}` — no `success`, no `message`.
+    A client that reads `message` everywhere else therefore shows an
+    unexplained failure, and the most useful thing in the response is lost:
+    "Expiry must be in MM/YY format" is precisely what the user needs to see.
+
+    `details.fields` keeps the per-field breakdown, so a form can mark the
+    individual input rather than only showing a sentence.
+    """
+    fields = [
+        {
+            "field": _field_path(error.get("loc", ())),
+            "message": _VALUE_ERROR_PREFIX.sub("", error.get("msg", "")),
+        }
+        for error in exc.errors()
+    ]
+
+    if len(fields) == 1:
+        message = fields[0]["message"]
+    else:
+        message = "; ".join(f"{f['field']}: {f['message']}" for f in fields)
+
+    logger.info("Rejected %s %s: %s", request.method, request.url.path, message)
+
+    return JSONResponse(
+        status_code=422,
+        content=_error_body("ValidationError", message, "", {"fields": fields}),
+    )
 
 
 # CustomErrorException class definition

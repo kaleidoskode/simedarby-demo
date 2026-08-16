@@ -8,8 +8,13 @@ built around, and what the material below is arranged to let you verify.
 
 ```
 backend/     the submission       FastAPI · MongoDB · Redis · Docker
+docs/        diagrams             how it fits together, rendered inline
 frontend/    not submitted work   Next.js — a demo harness, explained below
 ```
+
+**[docs/architecture.md](docs/architecture.md)** is the quickest way in: the
+seat-lock race, the real-time fan-out and the payment ordering as diagrams
+rather than prose.
 
 ---
 

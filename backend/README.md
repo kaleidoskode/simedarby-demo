@@ -555,6 +555,10 @@ started are excluded unless `include_past=true`.
 
 ## Architecture
 
+> Diagrams of everything below — the seat-lock race, the fan-out, the payment
+> ordering and the booking lifecycle — are in
+> **[docs/architecture.md](../docs/architecture.md)**.
+
 ```
                        +----------------------------+
    HTTP + WS --------->|  app/routes/*.py           |
